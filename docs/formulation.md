@@ -15,6 +15,8 @@ $$
 
 Energy in kWh over a slot is power in kW times $`\Delta`$. In code that factor is `0.5`. The worked example below uses the same slot length with a shorter horizon, $`T = 2`$, so the same equations can be checked by hand.
 
+British Summer Time changes the length of two civil days. The spring change has 46 half-hour slots and the autumn change has 50. This problem is a 48-slot day on a day that lasts 24 hours. The Agile import price loader rejects the 46- and 50-slot dates with an error and does not return a shorter or longer series.
+
 ## Parameters
 
 | Code name | Symbol | Domain | Unit |
