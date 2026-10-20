@@ -28,7 +28,11 @@ Energy in kWh over a slot is power in kW times $`\Delta`$. In code that factor i
 | `demand_kw[t]` | $`L_t`$ | $`\geq 0`$ | kW, average house load in slot $`t`$ |
 | `price_p_per_kwh[t]` | $`\lambda_t`$ | real | pence per kWh imported in slot $`t`$ |
 
-State of charge and both efficiencies are fractions in the ranges in the table. $`\eta^{d}`$ is strictly positive because the dynamics divide by it. A price may be negative: the import tariff then pays the household for each imported kWh.
+State of charge is a fraction in $`[0, 1]`$. Both efficiencies are fractions in $`(0, 1]`$. Zero is rejected for either efficiency: the state-of-charge update divides by discharge efficiency. A number such as 90 is rejected as well: 90% is written 0.9.
+
+`demand_kw` is average power in kW over the slot, the same unit as charge and discharge. The house's energy in that slot is `demand_kw * 0.5` kWh. One kilowatt for the half hour is half a kilowatt-hour. A day carries 48 `demand_kw` values and 48 `price_p_per_kwh` values.
+
+A price may be negative: the import tariff then pays the household for each imported kWh.
 
 ## Decision variables
 

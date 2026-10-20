@@ -5,7 +5,9 @@ description = "Simulator of UK home batteries scheduled against half-hourly elec
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.14.1",
+]
 
 [build-system]
 requires = ["hatchling"]
