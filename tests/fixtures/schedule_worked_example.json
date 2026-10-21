@@ -1,0 +1,12 @@
+{
+  "schedule": {
+    "charge_kw": [4.0, 0.0],
+    "discharge_kw": [0.0, 1.0],
+    "grid_import_kw": [5.0, 0.0],
+    "soc": [0.75, 0.25],
+    "charge_mode": [1, 0],
+    "cost_pence": 5.0
+  },
+  "price_p_per_kwh": [2.0, 10.0],
+  "grid_import_without_battery_kw": [1.0, 1.0]
+}
