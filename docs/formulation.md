@@ -165,6 +165,8 @@ $$
 
 The extra import is the energy turned into heat. If $`p_t > 0`$, that heat is bought at a positive price, so it cannot help the bill. If $`p_t < 0`$, the tariff pays for it. Cycling both powers, and holding the state of charge still, can then be optimal. It remains available when the battery is full, where a pure charge would break the state-of-charge cap, and when the terminal condition forbids a net gain over the day. The linear program takes that payment. A home inverter carries power in one direction at a time, so the payment is not a real option.
 
+The solve drops (MODE) first. That linear program is priced at the effective price $`p_t + a_t`$, not at the tariff alone. If any slot comes back with both powers positive, past a small tolerance, the home is solved again with (MODE) and that is the schedule that is kept. Both powers are profitable only when $`p_t + a_t`$ is negative, so a positive tariff does not by itself mean the linear program is safe: a negative adjustment can still pay for the loss, and a positive adjustment can stop a negative tariff from paying for it. The schedule records which of the two solves produced it.
+
 The formulation shuts the artefact off with one binary per slot:
 
 $$

@@ -1,12 +1,14 @@
 """Optimal schedule for one home.
 
-Implements the mixed-integer linear program in ``docs/formulation.md``.
-The horizon is the length of the demand series. A ``HomeDay`` has 48 slots.
-The worked example in that note is the same program with a horizon of 2.
+Solves the linear program in ``docs/formulation.md`` first. A slot that
+charges and discharges together while its effective price is negative is
+solved again with (MODE). The horizon is the length of the demand series.
+A ``HomeDay`` has 48 slots. The worked examples use a shorter horizon.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -57,33 +59,70 @@ def optimise_home(
     """Return the schedule that minimises (COST) in ``docs/formulation.md``.
 
     (COST) is the sum of ``(p_t + a_t) * g_t * 0.5``. ``p_t`` is the import
-    tariff. Constraints are (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE),
-    (TERMINAL), and (MODE). ``Delta`` is 0.5 hours. ``E`` in (SOC) is
+    tariff. The first solve uses (SOC), (SOC-BOUNDS), (POWER-BOUNDS),
+    (BALANCE), and (TERMINAL). ``Delta`` is 0.5 hours. ``E`` in (SOC) is
     ``capacity_kwh``.
+
+    If any slot has both powers above ``_SNAP``, the home is solved again
+    with (MODE). The linear program was priced at ``p_t + a_t``, which is
+    what makes that cycle profitable. ``solver`` on the result says which
+    solve was returned.
 
     ``price_adjustment_p_per_kwh`` is ``a_t`` in (COST). ``None`` is a zero
     adjustment, one value per slot. ``cost_pence`` on the result is the
     tariff bill, which equals (COST) when every adjustment is zero.
     """
     adjustment = _price_adjustment(day, price_adjustment_p_per_kwh)
+    relaxed = _solve(day, adjustment, with_mode=False)
+    if _same_slot_cycle(relaxed):
+        return _solve(day, adjustment, with_mode=True)
+    return relaxed
+
+
+def _solve(day: HomeDay, adjustment: Sequence[float], *, with_mode: bool) -> Schedule:
     variables = _Variables(_horizon(day))
+    constraints = [
+        _soc_constraint(day, variables),
+        _balance_constraint(day, variables),
+        _terminal_constraint(day, variables),
+    ]
+    integrality = np.zeros(variables.count, dtype=np.int64)
+    if with_mode:
+        constraints.append(_mode_constraint(day, variables))
+        integrality = _integrality(variables)
     result = milp(
         _objective(day, variables, adjustment),
-        integrality=_integrality(variables),
+        integrality=integrality,
         bounds=_bounds(day, variables),
-        constraints=[
-            _soc_constraint(day, variables),
-            _balance_constraint(day, variables),
-            _terminal_constraint(day, variables),
-            _mode_constraint(day, variables),
-        ],
+        constraints=constraints,
         # HiGHS otherwise stops at a relative gap of 1e-4, which can return a
         # feasible point whose bill is above the no-battery bill.
         options={"mip_rel_gap": 0.0},
     )
     if not result.success or result.x is None:
         raise RuntimeError(f"home schedule is not optimal ({result.message})")
-    return _schedule(day, variables, np.asarray(result.x, dtype=np.float64))
+    solved_by: Literal["lp", "milp"] = "milp" if with_mode else "lp"
+    return _schedule(
+        day,
+        variables,
+        np.asarray(result.x, dtype=np.float64),
+        solver=solved_by,
+    )
+
+
+def _same_slot_cycle(schedule: Schedule) -> bool:
+    """True when any slot charges and discharges past ``_SNAP``.
+
+    The linear program that produced ``schedule`` was priced at ``p_t + a_t``.
+    Both powers are profitable only when that effective price is negative, so
+    the tariff alone would miss a cycle that an adjustment pays for.
+    """
+    return any(
+        charge > _SNAP and discharge > _SNAP
+        for charge, discharge in zip(
+            schedule.charge_kw, schedule.discharge_kw, strict=True
+        )
+    )
 
 
 def _horizon(day: HomeDay) -> int:
@@ -247,7 +286,11 @@ def _zero_row(variables: _Variables) -> list[float]:
 
 
 def _schedule(
-    day: HomeDay, variables: _Variables, solution: NDArray[np.float64]
+    day: HomeDay,
+    variables: _Variables,
+    solution: NDArray[np.float64],
+    *,
+    solver: Literal["lp", "milp"],
 ) -> Schedule:
     charge: list[float] = []
     discharge: list[float] = []
@@ -269,11 +312,16 @@ def _schedule(
             )
         )
         soc.append(_state_of_charge(float(solution[variables.soc(slot)]), slot))
-        mode.append(_charge_mode(float(solution[variables.charge_mode(slot)]), slot))
-        if mode[slot] == 1 and discharge[slot] > 0.0:
-            raise RuntimeError(f"slot {slot} charges and discharges (mode 1)")
-        if mode[slot] == 0 and charge[slot] > 0.0:
-            raise RuntimeError(f"slot {slot} charges and discharges (mode 0)")
+        if solver == "lp":
+            mode.append(1 if charge[slot] > _SNAP else 0)
+        else:
+            mode.append(
+                _charge_mode(float(solution[variables.charge_mode(slot)]), slot)
+            )
+            if mode[slot] == 1 and discharge[slot] > 0.0:
+                raise RuntimeError(f"slot {slot} charges and discharges (mode 1)")
+            if mode[slot] == 0 and charge[slot] > 0.0:
+                raise RuntimeError(f"slot {slot} charges and discharges (mode 0)")
     return Schedule(
         charge_kw=charge,
         discharge_kw=discharge,
@@ -281,6 +329,7 @@ def _schedule(
         soc=soc,
         charge_mode=mode,
         cost_pence=_import_cost_pence(day.price_p_per_kwh, grid_import),
+        solver=solver,
     )
 
 
