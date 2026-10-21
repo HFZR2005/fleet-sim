@@ -4,6 +4,10 @@ This note specifies the optimisation problem for a single home battery over one 
 
 Export payments, on-site solar, degradation, and forecasts are out of this problem. They are named under [Later extensions](#later-extensions).
 
+## Notation
+
+The import tariff is $`p_t`$. Usable storage at a full battery is $`E`$, in kWh. $`\lambda`$ is reserved for Lagrange multipliers in later milestones, when a coordinator prices a shared constraint. It is not a price in this note.
+
 ## Time grid
 
 A day is $`T = 48`$ slots, indexed $`t = 0, \ldots, T - 1`$. Each slot lasts
@@ -21,14 +25,14 @@ British Summer Time changes the length of two civil days. The spring change has 
 
 | Code name | Symbol | Domain | Unit |
 | --- | --- | --- | --- |
-| `capacity_kwh` | $`C`$ | $`> 0`$ | kWh of stored energy at state of charge 1 |
+| `capacity_kwh` | $`E`$ | $`> 0`$ | kWh of stored energy at state of charge 1 |
 | `max_charge_kw` | $`\bar{c}`$ | $`\geq 0`$ | kW |
 | `max_discharge_kw` | $`\bar{d}`$ | $`\geq 0`$ | kW |
 | `eta_charge` | $`\eta^{c}`$ | $`(0, 1]`$ | fraction stored per unit of AC energy drawn to charge |
 | `eta_discharge` | $`\eta^{d}`$ | $`(0, 1]`$ | fraction delivered as AC energy per unit taken from the store |
 | `soc_initial` | $`s_0`$ | $`[0, 1]`$ | state of charge at the start of slot 0 |
 | `demand_kw[t]` | $`L_t`$ | $`\geq 0`$ | kW, average house load in slot $`t`$ |
-| `price_p_per_kwh[t]` | $`\lambda_t`$ | real | pence per kWh imported in slot $`t`$ |
+| `price_p_per_kwh[t]` | $`p_t`$ | real | pence per kWh imported in slot $`t`$ |
 | `price_adjustment_p_per_kwh[t]` | $`a_t`$ | real, default 0 | pence per kWh added to the tariff in the objective |
 
 State of charge is a fraction in $`[0, 1]`$. Both efficiencies are fractions in $`(0, 1]`$. Zero is rejected for either efficiency: the state-of-charge update divides by discharge efficiency. A number such as 90 is rejected as well: 90% is written 0.9.
@@ -60,7 +64,7 @@ For each slot $`t = 0, \ldots, T - 1`$:
 $$
 s_{t+1}
   = s_t
-  + \frac{\Delta}{C}
+  + \frac{\Delta}{E}
     \left(
       \eta^{c}\, c_t
       - \frac{d_t}{\eta^{d}}
@@ -128,16 +132,16 @@ The same equality covers a day that contains negative prices. A free ending stat
 Minimise the adjusted import cost in pence:
 
 $$
-\sum_{t=0}^{T-1} (\lambda_t + a_t) \, g_t \, \Delta.
+\sum_{t=0}^{T-1} (p_t + a_t) \, g_t \, \Delta.
 \tag{COST}
 $$
 
-$`g_t \Delta`$ is imported energy in kWh. $`\lambda_t`$ is the import tariff and $`a_t`$ is the price adjustment, both in pence per kWh. $`a_t`$ is how a later coordinator, and through it a network limit, will reach this home: the home keeps solving the same problem, and the only new input is that per-slot price. It is zero unless that coordinator sets it.
+$`g_t \Delta`$ is imported energy in kWh. $`p_t`$ is the import tariff and $`a_t`$ is the price adjustment, both in pence per kWh. $`a_t`$ is how a later coordinator, and through it a network limit, will reach this home: the home keeps solving the same problem, and the only new input is that per-slot price. It is zero unless that coordinator sets it.
 
 The solver minimises (COST). The schedule's `cost_pence` is the household's tariff bill and leaves the adjustment out:
 
 $$
-\sum_{t=0}^{T-1} \lambda_t \, g_t \, \Delta.
+\sum_{t=0}^{T-1} p_t \, g_t \, \Delta.
 $$
 
 In code that bill is `price_p_per_kwh[t] * grid_import_kw[t] * 0.5`. When every $`a_t`$ is zero, the bill and (COST) are the same number. The worked example is that case.
@@ -159,7 +163,7 @@ g_t
   = L_t + c_t \bigl(1 - \eta^{c} \eta^{d}\bigr).
 $$
 
-The extra import is the energy turned into heat. If $`\lambda_t > 0`$, that heat is bought at a positive price, so it cannot help the bill. If $`\lambda_t < 0`$, the tariff pays for it. Cycling both powers, and holding the state of charge still, can then be optimal. It remains available when the battery is full, where a pure charge would break the state-of-charge cap, and when the terminal condition forbids a net gain over the day. The linear program takes that payment. A home inverter carries power in one direction at a time, so the payment is not a real option.
+The extra import is the energy turned into heat. If $`p_t > 0`$, that heat is bought at a positive price, so it cannot help the bill. If $`p_t < 0`$, the tariff pays for it. Cycling both powers, and holding the state of charge still, can then be optimal. It remains available when the battery is full, where a pure charge would break the state-of-charge cap, and when the terminal condition forbids a net gain over the day. The linear program takes that payment. A home inverter carries power in one direction at a time, so the payment is not a real option.
 
 The formulation shuts the artefact off with one binary per slot:
 
@@ -174,7 +178,7 @@ $$
 
 $`y_t = 1`$ allows charging and forces `discharge_kw[t] = 0`. $`y_t = 0`$ allows discharging and forces `charge_kw[t] = 0`. Both powers may be zero in either mode, so an idle slot does not have a unique `charge_mode`. With (MODE) the program is a mixed-integer linear program. Dropping $`y_t`$ brings back the linear program that can earn money by cycling on a negative price.
 
-Illustration, separate from the test case. One slot, $`T = 1`$, $`L_0 = 0`$, $`\lambda_0 = -8`$, $`C = 2`$, $`\eta^{c} = \eta^{d} = 0.5`$, $`\bar{c} = \bar{d} = 4`$, and (TERMINAL) in force. (SOC) with $`s_1 = s_0`$ gives $`c_0 = 4 d_0`$. Import is $`g_0 = 3 d_0`$. The charge limit binds at $`d_0 = 1`$, $`c_0 = 4`$, hence $`g_0 = 3`$ kW and $`1.5`$ kWh imported. Because the price is negative, that point is the linear program's optimum. (COST) is $`-8 \times 1.5 = -12`$ pence, twelve pence earned for dissipating a loss. (MODE) forbids that point. The only feasible schedule is $`c_0 = d_0 = g_0 = 0`$, with bill 0.
+Illustration, separate from the test case. One slot, $`T = 1`$, $`L_0 = 0`$, $`p_0 = -8`$, $`E = 2`$, $`\eta^{c} = \eta^{d} = 0.5`$, $`\bar{c} = \bar{d} = 4`$, and (TERMINAL) in force. (SOC) with $`s_1 = s_0`$ gives $`c_0 = 4 d_0`$. Import is $`g_0 = 3 d_0`$. The charge limit binds at $`d_0 = 1`$, $`c_0 = 4`$, hence $`g_0 = 3`$ kW and $`1.5`$ kWh imported. Because the price is negative, that point is the linear program's optimum. (COST) is $`-8 \times 1.5 = -12`$ pence, twelve pence earned for dissipating a loss. (MODE) forbids that point. The only feasible schedule is $`c_0 = d_0 = g_0 = 0`$, with bill 0.
 
 ## Worked example
 
@@ -191,7 +195,7 @@ This is the instance to reuse as a test. Horizon $`T = 2`$, slot length (DT). Ev
 | `demand_kw` | `[1, 1]` |
 | `price_p_per_kwh` | `[2, 10]` |
 
-Substitute $`\Delta`$, $`C`$, and the efficiencies into (SOC):
+Substitute $`\Delta`$, $`E`$, and the efficiencies into (SOC):
 
 $$
 s_{t+1} = s_t + 0.125\, c_t - 0.5\, d_t.
@@ -243,6 +247,56 @@ That point is inside the remaining bounds: $`c_0 = 4 \leq 8`$, $`d_1 = 1 \leq 2`
 The bill is 5 pence. Slot 0 imports $`2.5`$ kWh at 2 p/kWh. Slot 1 imports nothing: the battery covers the 1 kW load, and $`s_2`$ is back at $`0.25`$.
 
 Without the battery, $`g_t = L_t`$ and the bill is $`0.5 \times 2 + 0.5 \times 10 = 6`$ pence. The battery saves 1 pence by buying the evening load in the cheap slot, including the energy the round trip loses.
+
+## Realistic worked example
+
+Same horizon and slot length, with efficiencies and power limits in the range of a home battery. The inverter limits do not bind: the house load and the round-trip loss do. Every adjustment is zero.
+
+| Parameter | Value |
+| --- | --- |
+| `capacity_kwh` | 10 |
+| `max_charge_kw` | 5 |
+| `max_discharge_kw` | 5 |
+| `eta_charge` | 0.95 |
+| `eta_discharge` | 0.95 |
+| `soc_initial` | 0.5 |
+| `demand_kw` | `[1, 1]` |
+| `price_p_per_kwh` | `[10, 20]` |
+
+$`\Delta / E = 0.05`$. Substituting the efficiencies,
+
+$$
+s_{t+1} = s_t + 0.0475\, c_t - \frac{d_t}{19}.
+$$
+
+(TERMINAL) forces $`d_0 + d_1 = 0.9025\,(c_0 + c_1)`$, and $`0.9025 = 0.95^2`$ is the fraction of charged energy that comes back as discharge. (BALANCE) with $`L_t = 1`$ is $`g_t = 1 + c_t - d_t`$. (COST) in pence is
+
+$$
+5 g_0 + 10 g_1 = 15 + 5 c_0 - 5 d_0 + 10 c_1 - 10 d_1.
+$$
+
+Replace $`d_0`$ using (TERMINAL):
+
+$$
+\text{bill} = 15 + \frac{39}{80} c_0 + \frac{439}{80} c_1 - 5 d_1.
+$$
+
+The coefficient of $`d_1`$ is negative, so a minimum takes $`d_1`$ as large as the bounds allow. $`g_1 \geq 0`$ says $`d_1 \leq 1 + c_1`$, $`d_0 \geq 0`$ says $`d_1 \leq 0.9025\,(c_0 + c_1)`$, and the inverter says $`d_1 \leq 5`$. On the face $`d_1 = 1 + c_1`$, which needs $`c_0 \geq 400/361 + (39/361)\, c_1`$,
+
+$$
+\text{bill} = 10 + \frac{39}{80}(c_0 + c_1).
+$$
+
+That expression falls as $`c_0 + c_1`$ falls, and the smallest sum on the face is $`c_1 = 0`$, $`c_0 = 400/361`$. Then $`d_0 = 0`$, $`d_1 = 1`$, $`g_0 = 761/361`$, $`g_1 = 0`$. The bill is $`3805/361`$ pence, about 10.540. Charge is about 1.108 kW and discharge is 1 kW, both under the 5 kW limits. The states of charge are $`s_1 = 1/2 + 19/361`$ and $`s_2 = 1/2`$.
+
+On the other face, $`d_0 = 0`$, the bill is $`15 - 4.025\, c_0 + 0.975\, c_1`$, which is higher for every smaller $`c_0`$. Setting $`d_1`$ to the inverter limit forces a large $`c_1`$ and a higher bill. The schedule is unique:
+
+| $`t`$ | `charge_kw` | `discharge_kw` | `grid_import_kw` | `soc` at end of slot | `charge_mode` |
+| --- | --- | --- | --- | --- | --- |
+| 0 | $`400/361`$ | 0 | $`761/361`$ | $`1/2 + 19/361`$ | 1 |
+| 1 | 0 | 1 | 0 | $`1/2`$ | 0 |
+
+Without the battery the bill is $`0.5 \times 10 + 0.5 \times 20 = 15`$ pence. The battery saves about 4.460 pence. The round trip returns 90.25% of the energy it took from the cheap slot, and $`10 < 0.9025 \times 20`$, so moving the second slot's load into the first slot still pays.
 
 ## Fleet measures
 

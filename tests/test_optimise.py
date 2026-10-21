@@ -70,7 +70,7 @@ def _assert_formulation(day: HomeDay, schedule: Schedule) -> None:
 
 def test_hand_solved_example() -> None:
     # Worked example in docs/formulation.md, horizon T=2, Delta=0.5.
-    # C=2, max charge 8 kW, max discharge 2 kW, both efficiencies 0.5,
+    # E=2, max charge 8 kW, max discharge 2 kW, both efficiencies 0.5,
     # soc_initial=0.25, demand [1, 1] kW, prices [2, 10] p/kWh.
     #
     # (SOC) with those efficiencies is s_{t+1} = s_t + 0.125 c_t - 0.5 d_t.
@@ -100,9 +100,43 @@ def test_hand_solved_example() -> None:
     _assert_formulation(day, schedule)
 
 
+def test_realistic_battery_hand_example() -> None:
+    # Realistic worked example in docs/formulation.md. T=2, Delta=0.5.
+    # E=10, both power limits 5 kW, both efficiencies 0.95, soc_initial=0.5,
+    # demand [1, 1] kW, prices [10, 20] p/kWh.
+    #
+    # (TERMINAL) forces d0 + d1 = 0.9025 (c0 + c1).
+    # bill = 15 + (39/80) c0 + (439/80) c1 - 5 d1.
+    # The minimum is on g1 = 0: c1 = 0, c0 = 400/361, d1 = 1, d0 = 0.
+    # g0 = 761/361, bill = 3805/361 pence. The 5 kW limits do not bind.
+    # With no battery the bill is 15 pence.
+    day = HomeDay.model_construct(
+        battery=_example_battery(
+            capacity_kwh=10.0,
+            max_charge_kw=5.0,
+            max_discharge_kw=5.0,
+            eta_charge=0.95,
+            eta_discharge=0.95,
+            soc_initial=0.5,
+        ),
+        demand_kw=[1.0, 1.0],
+        price_p_per_kwh=[10.0, 20.0],
+    )
+
+    schedule = optimise_home(day)
+
+    assert schedule.charge_kw == pytest.approx([400 / 361, 0.0], abs=_ABS)
+    assert schedule.discharge_kw == pytest.approx([0.0, 1.0], abs=_ABS)
+    assert schedule.grid_import_kw == pytest.approx([761 / 361, 0.0], abs=_ABS)
+    assert schedule.soc == pytest.approx([0.5 + 19 / 361, 0.5], abs=_ABS)
+    assert schedule.charge_mode == [1, 0]
+    assert schedule.cost_pence == pytest.approx(3805 / 361, abs=_ABS)
+    _assert_formulation(day, schedule)
+
+
 def test_negative_price_cannot_pay_for_same_slot_cycling() -> None:
     # Illustration in the formulation, separate from the worked example.
-    # T=1, load 0, price -8, C=2, efficiencies 0.5, power limits 4.
+    # T=1, load 0, price -8, E=2, efficiencies 0.5, power limits 4.
     # The linear program charges at 4 kW and discharges at 1 kW, imports
     # 3 kW, and earns 12 pence. (MODE) forbids that pair. The only feasible
     # schedule imports nothing and the bill is 0.
