@@ -1,4 +1,4 @@
-# AGENTS.md
+# [AGENTS.md](http://AGENTS.md)
 
 Instructions for AI coding agents (Cursor, Claude Code) working in this repository. Human contributors should read CONTRIBUTING.md; this file is the same conventions written for an agent.
 
@@ -15,6 +15,14 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 - Ask before adding any dependency.
 - Finish with a short summary: what changed, why, and any decision you made that the issue didn't specify.
 
+
+
+## Issues
+
+- Read the issue you're working on with `gh issue view <number>` before planning.
+- Treat its acceptance criteria as the definition of done, and its "Out of scope" section as a hard limit. 
+- Don't create, edit, comment on or close issues. Issues close when the PR that says "Closes #<number>" merges.
+
 ## Code conventions
 
 - Python 3.12, `src/` layout, managed with `uv`.
@@ -25,6 +33,8 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 - Type everything; `mypy --strict` must pass. `ruff check` and `ruff format` must pass.
 - Prefer clear code over clever code. No metaprogramming, no premature abstraction.
 
+
+
 ## Tests
 
 - Every behaviour change comes with tests in `tests/`.
@@ -32,8 +42,11 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 - Optimiser tests include at least one case small enough to solve by hand, with the expected answer worked out in a comment.
 - Random behaviour takes an explicit seed.
 
+
+
 ## Do not
 
 - Do not commit downloaded data; it is cached outside the repo (see `.gitignore`).
 - Do not set arguments explicitly when the library default is correct.
 - Do not silence type or lint errors with ignores unless the issue says to.
+
