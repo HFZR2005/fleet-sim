@@ -1,0 +1,22 @@
+# Defaults for `fleet-sim run-home`.
+# n is the number of cheapest slots to charge and the number of dearest
+# slots to discharge. 8 half-hours is 4 hours.
+
+n = 8
+
+# Average kW from local midnight: 8 quiet hours, 8 daytime hours,
+# 5 evening hours, 3 late hours.
+demand_kw = [
+  0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3,
+  0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6,
+  1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5,
+  0.6, 0.6, 0.6, 0.6, 0.6, 0.6,
+]
+
+[battery]
+capacity_kwh = 10.0
+max_charge_kw = 5.0
+max_discharge_kw = 5.0
+eta_charge = 0.95
+eta_discharge = 0.95
+soc_initial = 0.5
