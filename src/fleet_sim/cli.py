@@ -9,10 +9,10 @@ from typing import Annotated
 import typer
 from typer._click.exceptions import ClickException  # Typer vendors Click
 
-from fleet_sim.commands import run_home
+from fleet_sim.commands import run_fleet, run_home
 from fleet_sim.data import AgilePriceSource
 from fleet_sim.models.prices import ClockChangeDayError
-from fleet_sim.render import show_run_home
+from fleet_sim.render import show_run_fleet, show_run_home
 
 _OPENER: contextvars.ContextVar[Callable[[str], bytes] | None] = contextvars.ContextVar(
     "fleet_sim_price_opener",
@@ -23,6 +23,9 @@ app = typer.Typer(
     name="fleet-sim", no_args_is_help=True, pretty_exceptions_enable=False
 )
 _DEFAULT_OUTPUT = Path("figures") / "day"
+_DEFAULT_HERDING = Path("figures") / "herding"
+_DEFAULT_PEAKS = Path("figures") / "peaks"
+_DEFAULT_FRAMES = Path("frames.json")
 
 
 @app.callback()
@@ -103,3 +106,71 @@ def run_home_command(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     show_run_home(report, n, output)
+
+
+@app.command("run-fleet")
+def run_fleet_command(
+    n_homes: Annotated[int, typer.Option("--homes", help="Number of identical homes")],
+    start: Annotated[
+        date,
+        typer.Option(
+            "--start",
+            parser=_parse_date,
+            metavar="YYYY-MM-DD",
+            help="First UK civil day",
+        ),
+    ],
+    end: Annotated[
+        date,
+        typer.Option(
+            "--end",
+            parser=_parse_date,
+            metavar="YYYY-MM-DD",
+            help="Last UK civil day",
+        ),
+    ],
+    region: Annotated[str, typer.Option(help="Octopus GSP letter, for example C")],
+    config: Annotated[Path, typer.Option(help="Home config")] = Path("home.toml"),
+    frames: Annotated[Path, typer.Option(help="Frame file")] = _DEFAULT_FRAMES,
+    herding: Annotated[
+        Path, typer.Option(help="Herding figure path without suffix")
+    ] = (_DEFAULT_HERDING),
+    peaks: Annotated[
+        Path, typer.Option(help="Daily-peak figure path without suffix")
+    ] = (_DEFAULT_PEAKS),
+    cache_dir: Annotated[
+        Path | None,
+        typer.Option(
+            help="Price cache directory (default: .cache/agile)",
+            show_default=False,
+        ),
+    ] = None,
+) -> None:
+    """Run identical homes over a date range and save the herding figures."""
+    try:
+        report, herding_day = run_fleet(
+            n_homes=n_homes,
+            start=start,
+            end=end,
+            region=region,
+            config_path=config,
+            frames_path=frames,
+            herding_output=herding,
+            peaks_output=peaks,
+            price_source=AgilePriceSource(
+                cache_dir=cache_dir,
+                opener=_OPENER.get(),
+            ),
+        )
+    except (ClockChangeDayError, FileNotFoundError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    show_run_fleet(
+        report,
+        n_homes=n_homes,
+        region=region,
+        frames_path=frames,
+        herding_path=herding,
+        peaks_path=peaks,
+        herding_day=herding_day,
+    )

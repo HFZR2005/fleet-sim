@@ -244,6 +244,18 @@ The bill is 5 pence. Slot 0 imports $`2.5`$ kWh at 2 p/kWh. Slot 1 imports nothi
 
 Without the battery, $`g_t = L_t`$ and the bill is $`0.5 \times 2 + 0.5 \times 10 = 6`$ pence. The battery saves 1 pence by buying the evening load in the cheap slot, including the energy the round trip loses.
 
+## Fleet measures
+
+These describe a fleet of homes that have each already solved the one-home problem. They are not constraints on that problem.
+
+The root-node flow $`F_t`$ is the sum of the homes' grid imports in slot $`t`$. Peak demand is the greatest $`F_t`$, and the peak slot is the earliest $`t`$ that attains it. The without-battery peak is the same measure on the sum of the homes' demand, the import there would have been with no batteries.
+
+The peak-to-average ratio is the peak divided by the mean of $`F_t`$ over the day. When that mean is zero the ratio is zero.
+
+The coincidence factor is the fleet peak divided by the sum of the homes' own peaks. Each home's peak is the greatest import in its own schedule. When every one of those peaks is zero, the factor is zero. Identical homes that charge in the same slot have a factor of 1: the fleet peak is just the peaks stacked.
+
+Savings are in pence. A home's saving is its no-battery bill minus its tariff bill. The fleet's total saving is the sum of those, and the saving per home is the total divided by the number of homes. The tariff bill leaves any price adjustment out, as in (COST).
+
 ## Later extensions
 
 These are not part of the model above.
