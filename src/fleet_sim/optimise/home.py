@@ -56,8 +56,10 @@ def optimise_home(
 ) -> Schedule:
     """Return the schedule that minimises (COST) in ``docs/formulation.md``.
 
-    Constraints are (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE),
-    (TERMINAL), and (MODE). ``Delta`` is 0.5 hours.
+    (COST) is the sum of ``(p_t + a_t) * g_t * 0.5``. ``p_t`` is the import
+    tariff. Constraints are (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE),
+    (TERMINAL), and (MODE). ``Delta`` is 0.5 hours. ``E`` in (SOC) is
+    ``capacity_kwh``.
 
     ``price_adjustment_p_per_kwh`` is ``a_t`` in (COST). ``None`` is a zero
     adjustment, one value per slot. ``cost_pence`` on the result is the
