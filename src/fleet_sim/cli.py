@@ -10,6 +10,7 @@ import typer
 from typer._click.exceptions import ClickException  # Typer vendors Click
 
 from fleet_sim.commands import run_home
+from fleet_sim.data import AgilePriceSource
 from fleet_sim.models.prices import ClockChangeDayError
 from fleet_sim.render import show_run_home
 
@@ -93,8 +94,10 @@ def run_home_command(
             region,
             config_path=config,
             output=output,
-            cache_dir=cache_dir,
-            opener=_OPENER.get(),
+            price_source=AgilePriceSource(
+                cache_dir=cache_dir,
+                opener=_OPENER.get(),
+            ),
         )
     except (ClockChangeDayError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)

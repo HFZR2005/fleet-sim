@@ -70,13 +70,25 @@ class HomeDay(BaseModel):
     """One battery and one day of half-hourly demand and import prices.
 
     ``demand_kw`` is average power in kW. Energy in a slot is ``demand_kw * 0.5`` kWh.
+    ``home_id`` and ``region`` identify the home. ``transformer_id`` is the
+    network node above it, and nothing reads that field yet.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    home_id: str = "home"
+    region: str = "C"
+    transformer_id: str | None = None
     battery: BatterySpec
     demand_kw: list[float]
     price_p_per_kwh: list[float]
+
+    @field_validator("home_id", "region")
+    @classmethod
+    def identity_is_present(cls, value: str, info: ValidationInfo) -> str:
+        if value == "":
+            raise ValueError(f"{_field_name(info)} must not be empty")
+        return value
 
     @field_validator("demand_kw")
     @classmethod

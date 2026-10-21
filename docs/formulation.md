@@ -29,10 +29,11 @@ British Summer Time changes the length of two civil days. The spring change has 
 | `soc_initial` | $`s_0`$ | $`[0, 1]`$ | state of charge at the start of slot 0 |
 | `demand_kw[t]` | $`L_t`$ | $`\geq 0`$ | kW, average house load in slot $`t`$ |
 | `price_p_per_kwh[t]` | $`\lambda_t`$ | real | pence per kWh imported in slot $`t`$ |
+| `price_adjustment_p_per_kwh[t]` | $`a_t`$ | real, default 0 | pence per kWh added to the tariff in the objective |
 
 State of charge is a fraction in $`[0, 1]`$. Both efficiencies are fractions in $`(0, 1]`$. Zero is rejected for either efficiency: the state-of-charge update divides by discharge efficiency. A number such as 90 is rejected as well: 90% is written 0.9.
 
-`demand_kw` is average power in kW over the slot, the same unit as charge and discharge. The house's energy in that slot is `demand_kw * 0.5` kWh. One kilowatt for the half hour is half a kilowatt-hour. A day carries 48 `demand_kw` values and 48 `price_p_per_kwh` values.
+`demand_kw` is average power in kW over the slot, the same unit as charge and discharge. The house's energy in that slot is `demand_kw * 0.5` kWh. One kilowatt for the half hour is half a kilowatt-hour. A day carries 48 `demand_kw` values and 48 `price_p_per_kwh` values. `price_adjustment_p_per_kwh` has one value per slot when it is passed in. Omitted, every $`a_t`$ is zero.
 
 A price may be negative: the import tariff then pays the household for each imported kWh.
 
@@ -124,14 +125,22 @@ The same equality covers a day that contains negative prices. A free ending stat
 
 ## Objective
 
-Minimise the import bill in pence:
+Minimise the adjusted import cost in pence:
 
 $$
-\sum_{t=0}^{T-1} \lambda_t \, g_t \, \Delta.
+\sum_{t=0}^{T-1} (\lambda_t + a_t) \, g_t \, \Delta.
 \tag{COST}
 $$
 
-$`g_t \Delta`$ is imported energy in kWh and $`\lambda_t`$ is pence per kWh, so each term is pence. In code the sum is `price_p_per_kwh[t] * grid_import_kw[t] * 0.5`.
+$`g_t \Delta`$ is imported energy in kWh. $`\lambda_t`$ is the import tariff and $`a_t`$ is the price adjustment, both in pence per kWh. $`a_t`$ is how a later coordinator, and through it a network limit, will reach this home: the home keeps solving the same problem, and the only new input is that per-slot price. It is zero unless that coordinator sets it.
+
+The solver minimises (COST). The schedule's `cost_pence` is the household's tariff bill and leaves the adjustment out:
+
+$$
+\sum_{t=0}^{T-1} \lambda_t \, g_t \, \Delta.
+$$
+
+In code that bill is `price_p_per_kwh[t] * grid_import_kw[t] * 0.5`. When every $`a_t`$ is zero, the bill and (COST) are the same number. The worked example is that case.
 
 ## Simultaneous charge and discharge
 
@@ -169,7 +178,7 @@ Illustration, separate from the test case. One slot, $`T = 1`$, $`L_0 = 0`$, $`\
 
 ## Worked example
 
-This is the instance to reuse as a test. Horizon $`T = 2`$, slot length (DT). The mode constraints are satisfied, and the schedule below is also the unique minimiser of (COST) subject only to (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE), and (TERMINAL).
+This is the instance to reuse as a test. Horizon $`T = 2`$, slot length (DT). Every price adjustment is zero, so (COST) is the tariff bill. The mode constraints are satisfied, and the schedule below is also the unique minimiser of (COST) subject only to (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE), and (TERMINAL).
 
 | Parameter | Value |
 | --- | --- |

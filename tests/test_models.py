@@ -164,6 +164,36 @@ def test_demand_must_be_non_negative() -> None:
         HomeDay.model_validate(data)
 
 
+def test_home_day_defaults_identity_and_leaves_the_transformer_unset() -> None:
+    day = HomeDay.model_validate(home_data())
+
+    assert day.home_id == "home"
+    assert day.region == "C"
+    assert day.transformer_id is None
+
+
+def test_home_day_keeps_an_explicit_identity() -> None:
+    data = home_data()
+    data["home_id"] = "home-7"
+    data["region"] = "a"
+    data["transformer_id"] = "tx-1"
+
+    day = HomeDay.model_validate(data)
+
+    assert day.home_id == "home-7"
+    assert day.region == "a"
+    assert day.transformer_id == "tx-1"
+
+
+@pytest.mark.parametrize("field", ["home_id", "region"])
+def test_home_identity_must_not_be_empty(field: str) -> None:
+    data = home_data()
+    data[field] = ""
+
+    with pytest.raises(ValidationError, match=f"{field} must not be empty"):
+        HomeDay.model_validate(data)
+
+
 def test_home_day_rejects_demand_named_in_kwh() -> None:
     data = home_data()
     data["demand_kwh"] = data.pop("demand_kw")

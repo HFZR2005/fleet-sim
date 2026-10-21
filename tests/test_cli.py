@@ -32,6 +32,14 @@ def test_shipped_home_config_has_sensible_defaults() -> None:
     assert config.demand_kw == [0.3] * 16 + [0.6] * 16 + [1.5] * 10 + [0.6] * 6
 
 
+def test_shipped_home_config_names_the_home() -> None:
+    config = load_run_home_config(HOME)
+
+    assert config.home_id == "home"
+    assert config.region == "C"
+    assert config.transformer_id is None
+
+
 def test_run_home_prints_the_report_and_saves_the_figure(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -2,6 +2,9 @@
 # n is the number of cheapest slots to charge and the number of dearest
 # slots to discharge. 8 half-hours is 4 hours.
 
+home_id = "home"
+region = "C"
+
 n = 8
 
 # Average kW from local midnight: 8 quiet hours, 8 daytime hours,

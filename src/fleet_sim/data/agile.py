@@ -40,6 +40,32 @@ class _RatesPage(BaseModel):
     results: list[_UnitRate]
 
 
+class AgilePriceSource:
+    """Agile import prices, cached on disk. Implements ``PriceSource``."""
+
+    def __init__(
+        self,
+        *,
+        cache_dir: Path | None = None,
+        opener: Callable[[str], bytes] | None = None,
+    ) -> None:
+        self._cache_dir = cache_dir
+        self._opener = opener
+
+    def load(self, day: date, region: str) -> PriceSeries:
+        """Return ``load_agile_import_prices`` for ``day`` and ``region``.
+
+        Caching is the function's cache: a second load with the same day,
+        region, and cache directory reads the file and does not call ``opener``.
+        """
+        return load_agile_import_prices(
+            day,
+            region,
+            cache_dir=self._cache_dir,
+            opener=self._opener,
+        )
+
+
 def load_agile_import_prices(
     day: date,
     region: str,

@@ -122,6 +122,56 @@ def test_negative_price_cannot_pay_for_same_slot_cycling() -> None:
     _assert_formulation(day, schedule)
 
 
+def test_zero_price_adjustment_matches_the_unadjusted_schedule() -> None:
+    day = HomeDay.model_construct(
+        battery=_example_battery(),
+        demand_kw=[1.0, 1.0],
+        price_p_per_kwh=[2.0, 10.0],
+    )
+
+    assert optimise_home(day, [0.0, 0.0]) == optimise_home(day)
+
+
+def test_a_large_adjustment_moves_charging_off_the_cheap_slot() -> None:
+    # Same battery and loads as the worked example. Prices are [2, 10], so
+    # with no adjustment the home charges at 4 kW in slot 0.
+    #
+    # Add 100 p/kWh to slot 0. The objective then sees [102, 10]. Charging
+    # belongs in slot 1 and discharging in slot 0.
+    # (SOC) and (TERMINAL) still give c0 + c1 = 4 (d0 + d1).
+    # With c0 = 0 and d1 = 0, c1 = 4 d0.
+    # Slot 0 starts at soc 0.25 and can discharge 0.5 kW before soc hits 0
+    # (0.25 * 2 kWh / 0.5 h). Then c1 = 2, g0 = 1 - 0.5 = 0.5, g1 = 1 + 2 = 3,
+    # and soc ends [0, 0.25]. The tariff bill is 2*0.5*0.5 + 10*3*0.5 = 15.5.
+    day = HomeDay.model_construct(
+        battery=_example_battery(),
+        demand_kw=[1.0, 1.0],
+        price_p_per_kwh=[2.0, 10.0],
+    )
+
+    unadjusted = optimise_home(day)
+    shifted = optimise_home(day, [100.0, 0.0])
+
+    assert unadjusted.charge_kw == pytest.approx([4.0, 0.0], abs=_ABS)
+    assert shifted.charge_kw == pytest.approx([0.0, 2.0], abs=_ABS)
+    assert shifted.discharge_kw == pytest.approx([0.5, 0.0], abs=_ABS)
+    assert shifted.grid_import_kw == pytest.approx([0.5, 3.0], abs=_ABS)
+    assert shifted.soc == pytest.approx([0.0, 0.25], abs=_ABS)
+    assert shifted.charge_mode == [0, 1]
+    assert shifted.cost_pence == pytest.approx(15.5, abs=_ABS)
+
+
+def test_price_adjustment_must_cover_the_horizon() -> None:
+    day = HomeDay.model_construct(
+        battery=_example_battery(),
+        demand_kw=[1.0, 1.0],
+        price_p_per_kwh=[2.0, 10.0],
+    )
+
+    with pytest.raises(ValueError, match="one value per slot"):
+        optimise_home(day, [100.0])
+
+
 def test_flat_positive_prices_leave_the_battery_idle() -> None:
     day = HomeDay(
         battery=_example_battery(),

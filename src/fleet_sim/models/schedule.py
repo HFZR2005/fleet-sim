@@ -1,7 +1,7 @@
 """Optimal schedule for one home.
 
 The fields are the decision variables in ``docs/formulation.md``, plus the
-import bill (COST).
+tariff bill. That bill equals (COST) when every price adjustment is zero.
 """
 
 from typing import Self
@@ -18,8 +18,10 @@ from pydantic import (
 class Schedule(BaseModel):
     """Charge, discharge, import, and state of charge for each slot.
 
-    ``cost_pence`` is (COST): ``price_p_per_kwh[t] * grid_import_kw[t] * 0.5``,
-    summed over the horizon. ``charge_mode[t]`` is 1 when the slot may charge
+    ``cost_pence`` is the tariff bill, ``price_p_per_kwh[t] *
+    grid_import_kw[t] * 0.5``, summed over the horizon. It equals (COST) in
+    ``docs/formulation.md`` when every price adjustment is zero.
+    ``charge_mode[t]`` is 1 when the slot may charge
     and 0 when it may discharge. An idle slot may use either mode.
     """
 

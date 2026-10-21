@@ -5,6 +5,7 @@ The horizon is the length of the demand series. A ``HomeDay`` has 48 slots.
 The worked example in that note is the same program with a horizon of 2.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -49,15 +50,23 @@ class _Variables:
         return 4 * self.n_slots + slot
 
 
-def optimise_home(day: HomeDay) -> Schedule:
+def optimise_home(
+    day: HomeDay,
+    price_adjustment_p_per_kwh: Sequence[float] | None = None,
+) -> Schedule:
     """Return the schedule that minimises (COST) in ``docs/formulation.md``.
 
     Constraints are (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE),
     (TERMINAL), and (MODE). ``Delta`` is 0.5 hours.
+
+    ``price_adjustment_p_per_kwh`` is ``a_t`` in (COST). ``None`` is a zero
+    adjustment, one value per slot. ``cost_pence`` on the result is the
+    tariff bill, which equals (COST) when every adjustment is zero.
     """
+    adjustment = _price_adjustment(day, price_adjustment_p_per_kwh)
     variables = _Variables(_horizon(day))
     result = milp(
-        _objective(day, variables),
+        _objective(day, variables, adjustment),
         integrality=_integrality(variables),
         bounds=_bounds(day, variables),
         constraints=[
@@ -88,15 +97,34 @@ def _horizon(day: HomeDay) -> int:
     return n_demand
 
 
-def _objective(day: HomeDay, variables: _Variables) -> NDArray[np.float64]:
+def _price_adjustment(
+    day: HomeDay, price_adjustment_p_per_kwh: Sequence[float] | None
+) -> list[float]:
+    """``a_t`` in (COST). ``None`` is a zero for every slot of ``day``."""
+    n_slots = _horizon(day)
+    if price_adjustment_p_per_kwh is None:
+        return [0.0] * n_slots
+    adjustment = list(price_adjustment_p_per_kwh)
+    if len(adjustment) != n_slots:
+        raise ValueError(
+            "price_adjustment_p_per_kwh must have one value per slot "
+            f"(got {len(adjustment)} for {n_slots} slots)"
+        )
+    return adjustment
+
+
+def _objective(
+    day: HomeDay, variables: _Variables, adjustment: Sequence[float]
+) -> NDArray[np.float64]:
     """Coefficients of (COST) in ``docs/formulation.md``.
 
-    The bill is ``sum(price_p_per_kwh[t] * grid_import_kw[t] * 0.5)``.
-    Only grid import has a nonzero coefficient.
+    Slot ``t`` prices grid import at
+    ``(price_p_per_kwh[t] + adjustment[t]) * 0.5``. Only grid import has a
+    nonzero coefficient. The tariff bill leaves ``adjustment`` out.
     """
     cost = np.zeros(variables.count, dtype=np.float64)
     for slot, price in enumerate(day.price_p_per_kwh):
-        cost[variables.grid_import(slot)] = price * SLOT_HOURS
+        cost[variables.grid_import(slot)] = (price + adjustment[slot]) * SLOT_HOURS
     return cost
 
 
@@ -257,9 +285,10 @@ def _schedule(
 def _import_cost_pence(
     price_p_per_kwh: list[float], grid_import_kw: list[float]
 ) -> float:
-    """(COST) in ``docs/formulation.md``, in pence.
+    """Tariff bill in pence.
 
-    ``sum(price_p_per_kwh[t] * grid_import_kw[t] * 0.5)``.
+    ``sum(price_p_per_kwh[t] * grid_import_kw[t] * 0.5)``. This equals (COST)
+    in ``docs/formulation.md`` when every price adjustment is zero.
     """
     return sum(
         price * imported * SLOT_HOURS
