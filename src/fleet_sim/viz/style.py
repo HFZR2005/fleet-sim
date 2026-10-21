@@ -20,6 +20,8 @@ LINE_WIDTH = 1.6
 GRID_WIDTH = 0.6
 PNG_DPI = 160
 DAY_FIGURE_INCHES = (7.0, 6.2)
+HERDING_FIGURE_INCHES = (7.2, 5.4)
+PEAKS_FIGURE_INCHES = (7.2, 3.6)
 
 
 def apply_style() -> None:
