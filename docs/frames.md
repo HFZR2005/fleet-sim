@@ -26,3 +26,5 @@ A node object has:
 - `overload_kw`: how far the flow sits above the limit. It is zero when there is no limit
 
 `mode` comes from the schedule's charge and discharge power. A positive charge is `charging`, a positive discharge is `discharging`, and neither is `idle`.
+
+A scenario run also writes `metadata` on this file: the scenario, the master seed, the package version, and the git commit. The same record is written to `metadata.json` beside the frames. A frame file from `run-fleet` leaves `metadata` out.

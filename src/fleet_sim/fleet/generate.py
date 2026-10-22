@@ -19,6 +19,11 @@ from fleet_sim.fleet.homes import Fleet, Home, identical_homes
 from fleet_sim.models.demand import DemandFallback
 from fleet_sim.models.home import SLOTS_PER_DAY, BatterySpec
 from fleet_sim.models.prices import require_gsp_region
+from fleet_sim.models.scenario import (
+    BatteryDistribution,
+    BatteryProductSpec,
+    EfficiencyDistribution,
+)
 from fleet_sim.random_streams import RandomStreams
 
 # (DT) in docs/formulation.md. Demand from the pool is kWh per half hour.
@@ -31,9 +36,6 @@ _ETA_MEAN = 0.95
 _ETA_SD = 0.01
 _ETA_LOW = 0.92
 _ETA_HIGH = 0.97
-_ETA_A = (_ETA_LOW - _ETA_MEAN) / _ETA_SD
-_ETA_B = (_ETA_HIGH - _ETA_MEAN) / _ETA_SD
-
 FleetMode = Literal["diverse", "identical"]
 
 
@@ -81,6 +83,7 @@ def generate_fleet(
     *,
     region: str = "C",
     mode: FleetMode = "diverse",
+    distribution: BatteryDistribution | None = None,
 ) -> GeneratedFleet:
     """Draw ``n_homes`` homes for ``day``.
 
@@ -89,10 +92,12 @@ def generate_fleet(
     and then returns ``n_homes`` copies of its mean home. The same seed
     returns the same fleet. Households come from the ``demand`` stream,
     ownership from the ``penetration`` stream, and products from the
-    ``battery`` stream.
+    ``battery`` stream. ``distribution`` replaces the catalogue in
+    ``docs/assumptions.md`` when a scenario names its own.
     """
     gsp = require_gsp_region(region)
     _require_penetration(penetration)
+    products = default_battery_distribution() if distribution is None else distribution
     if mode not in ("diverse", "identical"):
         raise ValueError(f"mode must be 'diverse' or 'identical' (got {mode!r})")
     streams = RandomStreams(seed)
@@ -102,14 +107,12 @@ def generate_fleet(
     battery_stream = streams.generator("battery")
     homes: list[Home] = []
     fallbacks: list[DemandFallback] = []
-    demands: list[list[float]] = []
     for index, household_id in enumerate(households):
         load = pool.load(household_id, day)
         demand_kw = [energy / _HOURS_PER_SLOT for energy in load.series.demand_kwh]
-        demands.append(demand_kw)
         if load.fallback is not None:
             fallbacks.append(load.fallback)
-        battery: BatterySpec | None = _draw_battery(battery_stream)
+        battery: BatterySpec | None = _draw_battery(battery_stream, products)
         if index not in owned:
             battery = None
         homes.append(
@@ -123,7 +126,7 @@ def generate_fleet(
         )
     fleet = Fleet(homes=homes)
     if mode == "identical":
-        fleet = _identical(fleet, demands)
+        fleet = mean_fleet(fleet)
     return GeneratedFleet(fleet=fleet, fallbacks=fallbacks)
 
 
@@ -183,32 +186,66 @@ def _owned_indices(draws: Sequence[float], penetration: float) -> list[int]:
     return order[:count]
 
 
-def _draw_battery(generator: np.random.Generator) -> BatterySpec:
+def default_battery_distribution() -> BatteryDistribution:
+    """The catalogue and efficiency band in ``docs/assumptions.md``."""
+    return BatteryDistribution(
+        products=[
+            BatteryProductSpec(
+                capacity_kwh=product.capacity_kwh,
+                power_kw=list(product.power_kw),
+                weight=product.weight,
+            )
+            for product in BATTERY_PRODUCTS
+        ],
+        efficiency=EfficiencyDistribution(
+            mean=_ETA_MEAN,
+            standard_deviation=_ETA_SD,
+            low=_ETA_LOW,
+            high=_ETA_HIGH,
+        ),
+        soc_initial=_SOC_INITIAL,
+    )
+
+
+def mean_fleet(fleet: Fleet) -> Fleet:
+    """N copies of the mean demand and the mean owned battery."""
+    return _identical(fleet, [list(home.demand_kw) for home in fleet.homes])
+
+
+def _draw_battery(
+    generator: np.random.Generator, distribution: BatteryDistribution
+) -> BatterySpec:
     """One catalogue product, then a one-way efficiency for each direction.
 
     Capacity is drawn first. The inverter is then drawn from the ratings
     sold with that capacity, and both power limits take that one rating.
     """
-    weights = [product.weight for product in BATTERY_PRODUCTS]
+    products = distribution.products
+    weights = [product.weight for product in products]
     total = sum(weights)
     probabilities = [weight / total for weight in weights]
-    picked = int(generator.choice(len(BATTERY_PRODUCTS), p=probabilities))
-    product = BATTERY_PRODUCTS[picked]
-    power_kw = float(generator.choice(list(product.power_kw)))
+    picked = int(generator.choice(len(products), p=probabilities))
+    product = products[picked]
+    power_kw = float(generator.choice(product.power_kw))
     return BatterySpec(
         capacity_kwh=product.capacity_kwh,
         max_charge_kw=power_kw,
         max_discharge_kw=power_kw,
-        eta_charge=_efficiency(generator),
-        eta_discharge=_efficiency(generator),
-        soc_initial=_SOC_INITIAL,
+        eta_charge=_efficiency(generator, distribution.efficiency),
+        eta_discharge=_efficiency(generator, distribution.efficiency),
+        soc_initial=distribution.soc_initial,
     )
 
 
-def _efficiency(generator: np.random.Generator) -> float:
+def _efficiency(
+    generator: np.random.Generator, efficiency: EfficiencyDistribution
+) -> float:
     draw = float(generator.random())
-    value = float(truncnorm.ppf(draw, _ETA_A, _ETA_B, loc=_ETA_MEAN, scale=_ETA_SD))
-    return min(_ETA_HIGH, max(_ETA_LOW, value))
+    scale = efficiency.standard_deviation
+    low = (efficiency.low - efficiency.mean) / scale
+    high = (efficiency.high - efficiency.mean) / scale
+    value = float(truncnorm.ppf(draw, low, high, loc=efficiency.mean, scale=scale))
+    return min(efficiency.high, max(efficiency.low, value))
 
 
 def _identical(fleet: Fleet, demands: list[list[float]]) -> Fleet:

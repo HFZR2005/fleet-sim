@@ -6,6 +6,7 @@ from pathlib import Path
 from fleet_sim.fleet.solve import FleetDay
 from fleet_sim.models.frames import Frame, FrameLog, HomeFrame, HomeMode, NodeFrame
 from fleet_sim.models.prices import PriceSeries
+from fleet_sim.models.scenario import RunMetadata
 
 
 def frames_for_day(prices: PriceSeries, day: FleetDay) -> list[Frame]:
@@ -56,14 +57,20 @@ def frames_for_day(prices: PriceSeries, day: FleetDay) -> list[Frame]:
     return frames
 
 
-def write_frames(path: Path, frames: list[Frame]) -> None:
-    """Write ``frames`` as one JSON file with schema version 1."""
-    log = FrameLog(schema_version=1, frames=frames)
+def write_frames(
+    path: Path, frames: list[Frame], *, metadata: RunMetadata | None = None
+) -> None:
+    """Write ``frames`` as one JSON file with schema version 1.
+
+    ``metadata`` is included when this file belongs to a scenario run, so
+    the frames point at the scenario, seed, package version, and commit.
+    """
+    log = FrameLog(schema_version=1, frames=frames, metadata=metadata)
+    payload = log.model_dump(mode="json")
+    if metadata is None:
+        payload.pop("metadata")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(log.model_dump(mode="json"), indent=2) + "\n",
-        encoding="utf-8",
-    )
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def read_frames(path: Path) -> FrameLog:
