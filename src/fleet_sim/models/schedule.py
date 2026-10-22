@@ -4,7 +4,7 @@ The fields are the decision variables in ``docs/formulation.md``, plus the
 tariff bill. That bill equals (COST) when every price adjustment is zero.
 """
 
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -23,6 +23,9 @@ class Schedule(BaseModel):
     ``docs/formulation.md`` when every price adjustment is zero.
     ``charge_mode[t]`` is 1 when the slot may charge
     and 0 when it may discharge. An idle slot may use either mode.
+    ``solver`` is ``lp`` when the schedule came from the linear program and
+    ``milp`` when a same-slot cycle made the solver add (MODE). A schedule
+    that did not come from the optimiser leaves it unset.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -33,6 +36,7 @@ class Schedule(BaseModel):
     soc: list[float]
     charge_mode: list[int]
     cost_pence: float
+    solver: Literal["lp", "milp"] | None = None
 
     @field_validator("charge_kw", "discharge_kw", "grid_import_kw")
     @classmethod

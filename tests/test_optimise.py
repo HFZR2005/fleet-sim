@@ -1,12 +1,19 @@
 """Optimal one-home schedules. The hand example is the one in the formulation."""
 
+import json
 import random
+from datetime import date
+from pathlib import Path
 
 import pytest
 
+from fleet_sim.data import AgilePriceSource
 from fleet_sim.models import BatterySpec, HomeDay, Schedule
 from fleet_sim.models.home import SLOTS_PER_DAY
 from fleet_sim.optimise import optimise_home
+from fleet_sim.optimise.home import _solve
+
+_FIXTURES = Path(__file__).parent / "fixtures"
 
 _ABS = 1e-5
 
@@ -234,6 +241,106 @@ def test_flat_zero_prices_are_worth_nothing() -> None:
 
     assert schedule.cost_pence == pytest.approx(0.0, abs=_ABS)
     _assert_formulation(day, schedule)
+
+
+def test_positive_price_fixture_days_stay_with_the_linear_program() -> None:
+    # Flat positive prices from tests/fixtures/fleet_prices_three_days.json.
+    # A lossy battery does not cycle when every effective price is positive,
+    # so the linear program and the mixed-integer program bill the same day
+    # and the linear program has no slot with both powers positive.
+    raw = json.loads(
+        (_FIXTURES / "fleet_prices_three_days.json").read_text(encoding="utf-8")
+    )
+    zeros = [0.0] * SLOTS_PER_DAY
+    for item in raw["days"]:
+        prices = item["price_p_per_kwh"]
+        assert all(price > 0.0 for price in prices)
+        day = HomeDay(
+            battery=_example_battery(
+                capacity_kwh=10.0,
+                max_charge_kw=5.0,
+                max_discharge_kw=5.0,
+                eta_charge=0.95,
+                eta_discharge=0.95,
+                soc_initial=0.5,
+            ),
+            demand_kw=[0.6] * SLOTS_PER_DAY,
+            price_p_per_kwh=prices,
+        )
+        relaxed = _solve(day, zeros, with_mode=False)
+        integral = _solve(day, zeros, with_mode=True)
+        assert relaxed.solver == "lp"
+        assert all(
+            charge <= _ABS or discharge <= _ABS
+            for charge, discharge in zip(
+                relaxed.charge_kw, relaxed.discharge_kw, strict=True
+            )
+        )
+        assert relaxed.cost_pence == pytest.approx(integral.cost_pence, abs=_ABS)
+        assert optimise_home(day).solver == "lp"
+
+
+def test_negative_price_fixture_day_falls_back_to_the_mixed_integer_program(
+    tmp_path: Path,
+) -> None:
+    # Agile fixture for 2024-06-15, region C, includes a negative price.
+    # With the store already full, the linear program's only profit from that
+    # price is to cycle and import the loss, so its bill is below the
+    # mixed-integer bill. The returned schedule is the mixed-integer one.
+    fixture = _FIXTURES / "agile_import_c_2024-06-15.json"
+    prices = AgilePriceSource(
+        cache_dir=tmp_path, opener=lambda _url: fixture.read_bytes()
+    ).load(date(2024, 6, 15), "C")
+    # soc_initial is 1, so the negative slot cannot store extra energy for
+    # later. The only way the linear program profits from that price is to
+    # charge and discharge in the slot and import the round-trip loss.
+    day = HomeDay(
+        battery=_example_battery(
+            max_charge_kw=4.0, max_discharge_kw=4.0, soc_initial=1.0
+        ),
+        demand_kw=[0.0] * SLOTS_PER_DAY,
+        price_p_per_kwh=list(prices.price_p_per_kwh),
+    )
+    zeros = [0.0] * SLOTS_PER_DAY
+    relaxed = _solve(day, zeros, with_mode=False)
+    integral = _solve(day, zeros, with_mode=True)
+    assert relaxed.cost_pence < integral.cost_pence
+    assert any(
+        charge > _ABS and discharge > _ABS
+        for charge, discharge in zip(
+            relaxed.charge_kw, relaxed.discharge_kw, strict=True
+        )
+    )
+    returned = optimise_home(day)
+    assert returned.solver == "milp"
+    assert returned.charge_kw == pytest.approx(integral.charge_kw, abs=_ABS)
+    assert returned.discharge_kw == pytest.approx(integral.discharge_kw, abs=_ABS)
+    assert returned.grid_import_kw == pytest.approx(integral.grid_import_kw, abs=_ABS)
+    assert returned.cost_pence == pytest.approx(integral.cost_pence, abs=_ABS)
+
+
+def test_a_negative_adjustment_on_a_positive_tariff_uses_the_effective_price() -> None:
+    # Illustration battery, one slot, tariff +2 p/kWh. An adjustment of -10
+    # makes the effective price -8, the same price as the negative-price
+    # illustration. The tariff is positive. The linear program still cycles,
+    # and the returned schedule is the mixed-integer one, whose bill is 0.
+    day = HomeDay.model_construct(
+        battery=_example_battery(max_charge_kw=4.0, max_discharge_kw=4.0),
+        demand_kw=[0.0],
+        price_p_per_kwh=[2.0],
+    )
+    relaxed = _solve(day, [-10.0], with_mode=False)
+    integral = _solve(day, [-10.0], with_mode=True)
+    assert any(
+        charge > _ABS and discharge > _ABS
+        for charge, discharge in zip(
+            relaxed.charge_kw, relaxed.discharge_kw, strict=True
+        )
+    )
+    returned = optimise_home(day, [-10.0])
+    assert returned.solver == "milp"
+    assert returned.cost_pence == pytest.approx(integral.cost_pence, abs=_ABS)
+    assert returned.cost_pence == pytest.approx(0.0, abs=_ABS)
 
 
 def test_random_days_satisfy_the_formulation() -> None:
