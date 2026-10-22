@@ -1,3 +1,4 @@
+from fleet_sim.fleet.generate import GeneratedFleet, generate_fleet, with_demand
 from fleet_sim.fleet.homes import Fleet, Home, identical_homes
 from fleet_sim.fleet.metrics import FleetMetrics, fleet_metrics
 from fleet_sim.fleet.network import HomeProfile, Network, NodeFeedback
@@ -9,13 +10,16 @@ __all__ = [
     "FleetDay",
     "FleetMetrics",
     "FleetRange",
+    "GeneratedFleet",
     "Home",
     "HomeProfile",
     "Network",
     "NodeFeedback",
     "SolvedHome",
     "fleet_metrics",
+    "generate_fleet",
     "identical_homes",
     "run_fleet_days",
     "solve_fleet",
+    "with_demand",
 ]

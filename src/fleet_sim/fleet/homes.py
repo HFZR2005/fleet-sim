@@ -1,6 +1,7 @@
-"""A fleet of homes that share one battery and one demand shape.
+"""Homes in a fleet, each with its own ``home_id``.
 
-Each home keeps its own ``home_id``. Later results can name a home by that id.
+A home may have no battery. ``identical_homes`` copies one home, including
+that choice.
 """
 
 from pydantic import (
@@ -18,8 +19,10 @@ class Home(BaseModel):
     """One home's identity, battery, and half-hourly demand.
 
     This is the standing description from the home config. A day's prices are
-    not part of it. ``transformer_id`` is the network node above the home,
-    and nothing reads that field yet.
+    not part of it. ``battery`` is omitted when the home has no battery.
+    ``household_id`` is the Low Carbon London household this home keeps for a
+    whole run, when the fleet was drawn from that pool. ``transformer_id`` is
+    the network node above the home, and nothing reads that field yet.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -27,7 +30,8 @@ class Home(BaseModel):
     home_id: str
     region: str
     transformer_id: str | None = None
-    battery: BatterySpec
+    battery: BatterySpec | None = None
+    household_id: str | None = None
     demand_kw: list[float]
 
     @field_validator("home_id", "region")
