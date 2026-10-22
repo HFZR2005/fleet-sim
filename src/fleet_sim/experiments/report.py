@@ -73,6 +73,7 @@ class ExperimentReport(BaseModel):
 
     ``battery`` is with batteries minus without, in the scenario's mode.
     ``diversity`` is diverse minus identical, at the scenario's penetration.
+    ``without_batteries`` is the penetration-0 pass in the scenario's mode.
     ``seeds[i]`` is the master seed of replication ``i``.
     """
 
@@ -81,6 +82,7 @@ class ExperimentReport(BaseModel):
     master_seed: int
     seeds: list[int]
     metrics: list[MetricEstimate]
+    without_batteries: list[MetricEstimate]
     battery: list[PairedDifference]
     diversity: list[PairedDifference]
 
@@ -184,6 +186,12 @@ def run_experiment(
         metrics=[
             MetricEstimate(
                 metric=name, interval=t_interval(as_written[name], level=level)
+            )
+            for name in _METRICS
+        ],
+        without_batteries=[
+            MetricEstimate(
+                metric=name, interval=t_interval(without_battery[name], level=level)
             )
             for name in _METRICS
         ],

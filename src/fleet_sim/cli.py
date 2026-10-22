@@ -9,10 +9,10 @@ from typing import Annotated
 import typer
 from typer._click.exceptions import ClickException  # Typer vendors Click
 
-from fleet_sim.commands import run_fleet, run_home
+from fleet_sim.commands import run_fleet, run_home, run_saved_scenario
 from fleet_sim.data import AgilePriceSource
 from fleet_sim.models.prices import ClockChangeDayError
-from fleet_sim.render import show_run_fleet, show_run_home
+from fleet_sim.render import show_run_fleet, show_run_home, show_run_scenario
 
 _OPENER: contextvars.ContextVar[Callable[[str], bytes] | None] = contextvars.ContextVar(
     "fleet_sim_price_opener",
@@ -26,6 +26,8 @@ _DEFAULT_OUTPUT = Path("figures") / "day"
 _DEFAULT_HERDING = Path("figures") / "herding"
 _DEFAULT_PEAKS = Path("figures") / "peaks"
 _DEFAULT_FRAMES = Path("frames.json")
+_DEFAULT_SCENARIO_OUTPUT = Path("scenario-out")
+_DEFAULT_HOUSEHOLDS = Path(".cache") / "lcl" / "LCL-FullData.zip"
 
 
 @app.callback()
@@ -174,3 +176,39 @@ def run_fleet_command(
         peaks_path=peaks,
         herding_day=herding_day,
     )
+
+
+@app.command("run-scenario")
+def run_scenario_command(
+    scenario: Annotated[Path, typer.Argument(help="Scenario TOML file")],
+    households: Annotated[
+        Path, typer.Option(help="Low Carbon London demand file")
+    ] = _DEFAULT_HOUSEHOLDS,
+    output: Annotated[Path, typer.Option(help="Directory for frames and figures")] = (
+        _DEFAULT_SCENARIO_OUTPUT
+    ),
+    max_households: Annotated[
+        int,
+        typer.Option(help="Households to read, in file order"),
+    ] = 100,
+    cache_dir: Annotated[
+        Path | None,
+        typer.Option(
+            help="Price cache directory (default: .cache/agile)",
+            show_default=False,
+        ),
+    ] = None,
+) -> None:
+    """Run a scenario for its replications and save frames and figures."""
+    try:
+        result = run_saved_scenario(
+            scenario,
+            households_path=households,
+            output_dir=output,
+            price_source=AgilePriceSource(cache_dir=cache_dir, opener=_OPENER.get()),
+            max_households=max_households,
+        )
+    except (ClockChangeDayError, FileNotFoundError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    show_run_scenario(result)

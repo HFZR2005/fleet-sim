@@ -35,3 +35,15 @@ The command builds 100 copies of `home.toml`, solves each day on its own, and pr
 For January 2026 in region C the median peak was 560.00 kW with the batteries and 150.00 kW without them. Without batteries that peak is the evening demand of the hundred homes, and it does not change from day to day. Charging lifts it: the highest peak was 650.00 kW, on 2 January. The median saving was 97.16 pence per home. The figure below is that day's import and price, written with `--herding docs/herding --peaks docs/peaks`.
 
 ![Fleet import with and without batteries on 2 January 2026, region C, 100 homes](docs/herding.svg)
+
+## Findings
+
+```bash
+uv run fleet-sim run-scenario scenarios/diverse.toml
+```
+
+The command reads the scenario, draws each replication from the Low Carbon London file in `.cache/lcl`, and prints every metric as a mean with a 95% interval. It writes frames and metadata under `scenario-out/`, and saves the diversity and penetration figures there.
+
+Eight homes, region C, 5–11 January 2026, thirty replications. Demand is the first 100 households in that file. A diverse fleet peaks 3.57 kW below identical copies of the same mean home (95% interval −4.34 to −2.80 kW). One battery in the eight is enough for the fleet peak to rise above the no-battery peak, and at full penetration the peak is 26.19 kW higher. The curve is the six penetrations in `scenarios/penetration-sweep.toml`.
+
+![Peak demand with and without batteries against penetration, eight homes, region C, 5–11 January 2026](docs/penetration.svg)
