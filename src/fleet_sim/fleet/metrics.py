@@ -6,28 +6,12 @@ a solved day. They do not solve one.
 
 from collections.abc import Sequence
 
-from pydantic import BaseModel, ConfigDict
-
 from fleet_sim.fleet.network import ROOT_NODE_ID
-from fleet_sim.fleet.solve import FleetDay
+from fleet_sim.models.fleet import FleetDay
+from fleet_sim.models.results import FleetMetrics
 
 # (DT) in docs/formulation.md.
 _HOURS_PER_SLOT = 0.5
-
-
-class FleetMetrics(BaseModel):
-    """Peak, shape, and savings for one solved day."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    peak_demand_kw: float
-    peak_slot: int
-    peak_demand_without_battery_kw: float
-    peak_slot_without_battery: int
-    peak_to_average_ratio: float
-    coincidence_factor: float
-    total_savings_pence: float
-    savings_per_home_pence: float
 
 
 def fleet_metrics(day: FleetDay, price_p_per_kwh: Sequence[float]) -> FleetMetrics:

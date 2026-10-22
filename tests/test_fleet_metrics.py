@@ -3,8 +3,8 @@
 import pytest
 
 from fleet_sim.fleet import FleetDay, SolvedHome, fleet_metrics
-from fleet_sim.fleet.network import NodeFeedback
 from fleet_sim.models import Schedule
+from fleet_sim.models.network import NodeFeedback
 
 
 def _schedule(imported: list[float], cost_pence: float) -> Schedule:

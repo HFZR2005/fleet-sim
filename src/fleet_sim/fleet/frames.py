@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from fleet_sim.fleet.solve import FleetDay
+from fleet_sim.models.fleet import FleetDay
 from fleet_sim.models.frames import Frame, FrameLog, HomeFrame, HomeMode, NodeFrame
 from fleet_sim.models.prices import PriceSeries
 from fleet_sim.models.scenario import RunMetadata

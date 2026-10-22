@@ -4,17 +4,16 @@ One penetration is ``run_experiment``. This walks the list in a scenario
 such as ``scenarios/penetration-sweep.toml``.
 """
 
-from pydantic import BaseModel, ConfigDict
-
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import PriceSource
-from fleet_sim.experiments.report import (
-    ConfidenceInterval,
-    MetricEstimate,
-    replication_seed,
-    t_interval,
-)
 from fleet_sim.experiments.report import _means as _replication_means
+from fleet_sim.experiments.report import replication_seed, t_interval
+from fleet_sim.models.results import (
+    LevelResult,
+    MetricEstimate,
+    PeakCrossing,
+    PenetrationSweep,
+)
 from fleet_sim.models.scenario import Scenario
 from fleet_sim.progress import NullProgress, RunProgress
 
@@ -28,46 +27,6 @@ _METRICS = (
     "coincidence_factor",
 )
 _NO_BATTERY_PEAK = "peak_demand_without_battery_kw"
-
-
-class LevelResult(BaseModel):
-    """Intervals for one penetration, over the replications."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    penetration: float
-    metrics: list[MetricEstimate]
-    peak_without_battery: ConfidenceInterval
-    peak_minus_no_battery: ConfidenceInterval
-
-
-class PeakCrossing(BaseModel):
-    """Where the with-battery peak first rises above the no-battery peak.
-
-    ``per_replication`` is that penetration for each replication, or ``None``
-    when that replication never crosses. ``lowest`` and ``highest`` are the
-    range of the replications that do. ``interval_above_zero_from`` is the
-    first grid level whose 95% interval for the peak difference lies wholly
-    above zero.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    per_replication: list[float | None]
-    lowest: float | None
-    highest: float | None
-    interval_above_zero_from: float | None
-
-
-class PenetrationSweep(BaseModel):
-    """The penetration grid, and the crossing of the no-battery peak."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    master_seed: int
-    seeds: list[int]
-    levels: list[LevelResult]
-    crossing: PeakCrossing
 
 
 def first_crossing(

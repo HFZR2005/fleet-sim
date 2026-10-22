@@ -9,50 +9,13 @@ import statistics
 from collections.abc import Iterator
 from datetime import date, timedelta
 
-from pydantic import BaseModel, ConfigDict
-
 from fleet_sim.data.source import PriceSource
-from fleet_sim.fleet.homes import Fleet
-from fleet_sim.fleet.metrics import FleetMetrics, fleet_metrics
-from fleet_sim.fleet.solve import FleetDay, solve_fleet
+from fleet_sim.fleet.metrics import fleet_metrics
+from fleet_sim.fleet.solve import solve_fleet
+from fleet_sim.models.fleet import Fleet
 from fleet_sim.models.prices import london_day_bounds_utc
+from fleet_sim.models.results import DayReport, FleetRange, Spread
 from fleet_sim.progress import RunProgress
-
-
-class DayReport(BaseModel):
-    """One civil day's solve and its measures."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    day: date
-    metrics: FleetMetrics
-    solution: FleetDay
-
-
-class Spread(BaseModel):
-    """Median and the lowest and highest value across the days."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    median: float
-    minimum: float
-    maximum: float
-
-
-class FleetRange(BaseModel):
-    """Per-day measures, plus the spread of each measure across the days."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    days: list[DayReport]
-    peak_demand_kw: Spread
-    peak_slot: Spread
-    peak_demand_without_battery_kw: Spread
-    peak_slot_without_battery: Spread
-    peak_to_average_ratio: Spread
-    coincidence_factor: Spread
-    total_savings_pence: Spread
-    savings_per_home_pence: Spread
 
 
 def run_fleet_days(

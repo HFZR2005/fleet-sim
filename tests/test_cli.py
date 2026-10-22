@@ -11,7 +11,7 @@ from rich.text import Text
 
 from fleet_sim.cli import main
 from fleet_sim.commands import load_run_home_config
-from fleet_sim.models.comparison import ComparisonReport
+from fleet_sim.models.results import ComparisonReport
 from fleet_sim.render import run_home_view
 
 ROOT = Path(__file__).parents[1]

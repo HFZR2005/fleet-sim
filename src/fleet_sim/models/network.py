@@ -1,11 +1,12 @@
-"""The network a scenario names, and the tree a run builds from it.
+"""The network a scenario names, the flow on it, and how far a limit was exceeded.
 
-``NetworkSettings`` is the ``[network]`` section of a scenario. The fields
-a later issue will use for sizing, location, and clustered ownership are
-stored here and ignored by the topology stub. ``NetworkSpec`` is the tree
-that stub, and every later network feature, hands to ``Network``.
+``NetworkSettings`` is the ``[network]`` section of a scenario. ``NetworkSpec``
+is the tree a run builds. ``HomeProfile`` is the only view of a home that
+evaluation receives. ``NodeFeedback`` is the flow that comes back, and the
+overload types reduce that flow to how far a transformer sat over its limit.
 """
 
+from datetime import date
 from typing import Self
 
 from pydantic import (
@@ -210,3 +211,83 @@ class NetworkSettings(BaseModel):
                 f"lon_min {self.lon_min} must be below lon_max {self.lon_max}"
             )
         return self
+
+
+class HomeProfile(BaseModel):
+    """Grid import of one solved home, in kW, one value per slot."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    home_id: str
+    grid_import_kw: list[float]
+
+    @field_validator("grid_import_kw")
+    @classmethod
+    def import_is_non_negative(cls, value: list[float]) -> list[float]:
+        if len(value) == 0:
+            raise ValueError("grid_import_kw must contain at least one slot")
+        for item in value:
+            if item < 0:
+                raise ValueError(
+                    f"grid_import_kw must be at least 0 in every slot (got {item})"
+                )
+        return value
+
+
+class NodeFeedback(BaseModel):
+    """Flow through one network node over the day.
+
+    ``limit_kw`` is ``None`` when the node is unconstrained. ``overload_kw``
+    is how far ``flow_kw`` sits above that limit, and it is zero when there
+    is no limit.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    node_id: str
+    flow_kw: list[float]
+    limit_kw: float | None
+    overload_kw: list[float]
+
+
+class TransformerOverload(BaseModel):
+    """One transformer on one day."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    node_id: str
+    peak_utilisation: float
+    overload_energy_kwh: float
+    overloaded_slots: int
+
+
+class DayOverload(BaseModel):
+    """Every transformer on one civil day, plus the hidden-overload share.
+
+    The hidden-overload share is the fraction of slots where the fleet total
+    is inside the sum of the limits but at least one transformer is over its
+    own.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    day: date
+    transformers: list[TransformerOverload]
+    hidden_overload_share: float
+
+
+class ReplicationOverload(BaseModel):
+    """The day's overloads, reduced to one replication.
+
+    ``overload_hour`` is the hour of day in which overloaded slots occur
+    most. It is ``None`` when no slot is overloaded.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    transformers_overloaded_share: float
+    mean_peak_utilisation: float
+    worst_peak_utilisation: float
+    total_overload_energy_kwh: float
+    overload_hour: int | None
+    hidden_overload_share: float

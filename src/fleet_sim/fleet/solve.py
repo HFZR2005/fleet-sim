@@ -6,34 +6,12 @@ solver. The loop solves every home on its own, including identical ones.
 
 from collections.abc import Sequence
 
-from pydantic import BaseModel, ConfigDict
-
-from fleet_sim.fleet.homes import Fleet
-from fleet_sim.fleet.network import HomeProfile, Network, NodeFeedback
-from fleet_sim.models.home import HomeDay
+from fleet_sim.fleet.network import Network
+from fleet_sim.models.fleet import Fleet, FleetDay, SolvedHome
+from fleet_sim.models.home import HomeDay, Schedule
+from fleet_sim.models.network import HomeProfile
 from fleet_sim.models.prices import PriceSeries, require_gsp_region
-from fleet_sim.models.schedule import Schedule
 from fleet_sim.optimise.home import optimise_home
-
-
-class SolvedHome(BaseModel):
-    """One home's schedule for the day, with the demand it was given."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    home_id: str
-    transformer_id: str | None
-    demand_kw: list[float]
-    schedule: Schedule
-
-
-class FleetDay(BaseModel):
-    """Schedules for every home, and the network's flow for the day."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    homes: list[SolvedHome]
-    nodes: list[NodeFeedback]
 
 
 def solve_fleet(

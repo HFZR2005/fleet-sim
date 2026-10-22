@@ -11,16 +11,17 @@ from datetime import date
 from typing import Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict
 from scipy.stats import truncnorm
 
 from fleet_sim.data.households import HouseholdDemandPool
-from fleet_sim.fleet.homes import Fleet, Home, identical_homes
+from fleet_sim.fleet.homes import identical_homes
 from fleet_sim.models.demand import DemandFallback
+from fleet_sim.models.fleet import Fleet, GeneratedFleet, Home
 from fleet_sim.models.home import SLOTS_PER_DAY, BatterySpec
 from fleet_sim.models.prices import require_gsp_region
 from fleet_sim.models.scenario import (
     BatteryDistribution,
+    BatteryProduct,
     BatteryProductSpec,
     EfficiencyDistribution,
 )
@@ -39,21 +40,6 @@ _ETA_HIGH = 0.97
 FleetMode = Literal["diverse", "identical"]
 
 
-class BatteryProduct(BaseModel):
-    """One catalogue entry: a usable capacity and the inverters sold with it.
-
-    ``power_kw`` is conditional on ``capacity_kwh``. Charge and discharge
-    share one of those inverter ratings. ``weight`` is the relative chance
-    of drawing this capacity. The weights in the catalogue are equal.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    capacity_kwh: float
-    power_kw: tuple[float, ...]
-    weight: float
-
-
 # Usable kWh, then the inverter ratings sold with that size. 3.6 kW sits
 # under the 3.68 kW G98 single-phase limit. 5 kW is the continuous rating
 # of a Powerwall 2, whose usable capacity is 13.5 kWh, and it is also a
@@ -63,15 +49,6 @@ BATTERY_PRODUCTS: tuple[BatteryProduct, ...] = (
     BatteryProduct(capacity_kwh=10.0, power_kw=(3.6, 5.0), weight=1.0),
     BatteryProduct(capacity_kwh=13.5, power_kw=(5.0,), weight=1.0),
 )
-
-
-class GeneratedFleet(BaseModel):
-    """A fleet for one day, plus any trial-day fallbacks behind its demand."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    fleet: Fleet
-    fallbacks: list[DemandFallback]
 
 
 def generate_fleet(

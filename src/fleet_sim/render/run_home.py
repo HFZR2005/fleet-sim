@@ -6,7 +6,7 @@ from rich.console import Console, Group
 from rich.table import Table
 from rich.text import Text
 
-from fleet_sim.models.comparison import ComparisonReport
+from fleet_sim.models.results import ComparisonReport
 
 # Terminal styles, so a light or dark background can still read them.
 # Dim is the baseline, cyan the rule, blue the optimiser.

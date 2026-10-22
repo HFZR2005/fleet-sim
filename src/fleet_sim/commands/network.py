@@ -11,16 +11,17 @@ from pathlib import Path
 
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import PriceSource
-from fleet_sim.experiments.report import MetricEstimate, replication_seed, t_interval
+from fleet_sim.experiments.report import replication_seed, t_interval
 from fleet_sim.fleet.frames import frames_for_day, write_frames
 from fleet_sim.fleet.generate import generate_fleet, mean_fleet, with_demand
-from fleet_sim.fleet.network import HomeProfile, Network
+from fleet_sim.fleet.network import Network
 from fleet_sim.fleet.overload import day_overload, summarise_replication
 from fleet_sim.fleet.solve import solve_fleet
 from fleet_sim.fleet.topology import assign_transformers, build_topology
 from fleet_sim.models.frames import Frame
+from fleet_sim.models.network import HomeProfile
+from fleet_sim.models.results import MetricEstimate, ScenarioRun
 from fleet_sim.models.scenario import RunMetadata, Scenario
-from fleet_sim.models.scenario_run import ScenarioRun
 from fleet_sim.progress import RunProgress
 from fleet_sim.scenario import git_commit
 from fleet_sim.stubs import active_stubs, begin_stub_run, require_no_stubs

@@ -10,7 +10,7 @@ from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-from fleet_sim.models.schedule import Schedule
+from fleet_sim.models.home import Schedule
 from fleet_sim.viz.style import (
     DAY_FIGURE_INCHES,
     IMPORT_WITH_BATTERY,

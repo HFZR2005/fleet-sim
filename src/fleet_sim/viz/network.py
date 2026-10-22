@@ -3,7 +3,7 @@
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
-from fleet_sim.experiments.report import MetricEstimate
+from fleet_sim.models.results import MetricEstimate
 from fleet_sim.stubs import stub
 from fleet_sim.viz.style import (
     FONT_SIZE,
