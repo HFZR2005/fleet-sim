@@ -10,6 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from fleet_sim.models.scenario import RunMetadata
+
 HomeMode = Literal["charging", "discharging", "idle"]
 
 
@@ -63,9 +65,14 @@ class Frame(BaseModel):
 
 
 class FrameLog(BaseModel):
-    """The JSON file a run writes. ``schema_version`` is 1."""
+    """The JSON file a run writes. ``schema_version`` is 1.
+
+    ``metadata`` is set when the frames come from a scenario run. It is the
+    same record written beside the other outputs.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[1]
     frames: list[Frame]
+    metadata: RunMetadata | None = None
