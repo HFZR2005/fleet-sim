@@ -35,3 +35,7 @@ Identical mode builds the diverse fleet, then replaces it with N copies of the m
 ## Demand
 
 Demand is a day from the Low Carbon London pool, documented in `docs/household-demand.md`. Energy in the file is kWh per half hour. The home stores average kW, which is that energy divided by 0.5 hours. The trial predates widespread heat pumps and electric vehicles.
+
+## Transformer limits
+
+A limit is a fixed kW cap on a node's flow in each half-hour slot. The same number applies in every slot. A real distribution transformer has a cyclic rating and can carry more than its nameplate for a short time, so an overload here means the flow exceeds the rating. It does not mean the transformer fails.

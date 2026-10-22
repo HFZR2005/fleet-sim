@@ -28,14 +28,17 @@ def test_the_smoke_scenario_runs_and_lists_its_stubs(
     assert text.startswith("STUB ") or "STUB " in text
     assert "build_topology" in text
     assert "day_overload" in text
-    assert "_evaluate_transformers" in text
+    assert "_evaluate_transformers" not in text
     assert "plot_network_overload" in text
     frames = json.loads((output / "frames.json").read_text(encoding="utf-8"))
     nodes = frames["frames"][0]["nodes"]
     by_id = {node["node_id"]: node for node in nodes}
     assert set(by_id) == {"root", "transformer-1", "transformer-2"}
-    assert by_id["transformer-1"]["overload_kw"] == 0.0
-    assert by_id["transformer-1"]["flow_kw"] > by_id["transformer-1"]["limit_kw"]
+    transformer = by_id["transformer-1"]
+    assert transformer["flow_kw"] > transformer["limit_kw"]
+    assert transformer["overload_kw"] == pytest.approx(
+        transformer["flow_kw"] - transformer["limit_kw"]
+    )
     assert by_id["root"]["flow_kw"] == pytest.approx(
         by_id["transformer-1"]["flow_kw"] + by_id["transformer-2"]["flow_kw"]
     )

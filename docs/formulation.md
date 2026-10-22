@@ -312,6 +312,16 @@ The coincidence factor is the fleet peak divided by the sum of the homes' own pe
 
 Savings are in pence. A home's saving is its no-battery bill minus its tariff bill. The fleet's total saving is the sum of those, and the saving per home is the total divided by the number of homes. The tariff bill leaves any price adjustment out, as in (COST).
 
+## Network
+
+The homes sit on a tree. One node is the root. Every other node has one parent. Each home is attached to exactly one node, and that node is not the root.
+
+Flow at a node is the sum of the grid imports of the homes attached to that node and the flow of each of its children. The sum is taken from the leaves upward, so a parent is added only after its children. The root flow $`F_t`$ is that sum over every home, the same root flow as in [Fleet measures](#fleet-measures).
+
+A node may have a limit, a fixed kW cap, the same in every slot. The limit says the flow is at most that cap. Overload in a slot is how far the flow sits above the cap, and it is zero when the flow is under the cap or the node has no limit.
+
+In this milestone the limit is measured, not enforced. A home still optimises against the tariff, with every price adjustment left at zero. Milestone 5 enforces the limit through those price adjustments.
+
 ## Later extensions
 
 These are not part of the model above.
