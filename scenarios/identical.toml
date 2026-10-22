@@ -1,5 +1,5 @@
 # N copies of the mean home. One penetration, one master seed.
-# replications is recorded here; repeating the run is a later issue.
+# 30 replications. Each replication draws a new fleet.
 
 n_homes = 8
 penetration = 1.0
@@ -8,7 +8,7 @@ region = "C"
 start = 2026-01-05
 end = 2026-01-11
 seed = 1
-replications = 1
+replications = 30
 
 [battery]
 soc_initial = 0.5

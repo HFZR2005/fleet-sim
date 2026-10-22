@@ -7,7 +7,7 @@ region = "C"
 start = 2026-01-05
 end = 2026-01-11
 seed = 1
-replications = 1
+replications = 30
 
 [battery]
 soc_initial = 0.5

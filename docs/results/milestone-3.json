@@ -1,0 +1,578 @@
+{
+  "pool_households": 100,
+  "pool_note": "First 100 households in LCL-FullData.zip file order, not a random sample of all 5,567.",
+  "diversity_scenario": "scenarios/diverse.toml",
+  "identical_scenario": "scenarios/identical.toml",
+  "sweep_scenario": "scenarios/penetration-sweep.toml",
+  "diversity": {
+    "master_seed": 1,
+    "seeds": [
+      1835504127,
+      1189033389,
+      1596810411,
+      4010755824,
+      3549136632,
+      3025039489,
+      1563021450,
+      4245214700,
+      2579376181,
+      408484264,
+      3151767335,
+      3509411736,
+      1639577730,
+      3553598660,
+      1220005862,
+      3861980557,
+      3755104110,
+      534095829,
+      2567080190,
+      3999303432,
+      2831549899,
+      1084828000,
+      3712744712,
+      2934734566,
+      951605772,
+      3495060231,
+      49018332,
+      3105752741,
+      4208506857,
+      1179198021
+    ],
+    "metrics": [
+      {
+        "metric": "peak_demand_kw",
+        "interval": {
+          "level": 0.95,
+          "mean": 36.82600165858267,
+          "low": 35.71760318588964,
+          "high": 37.9344001312757,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "peak_demand_without_battery_kw",
+        "interval": {
+          "level": 0.95,
+          "mean": 10.63975241142857,
+          "low": 9.534219920652239,
+          "high": 11.745284902204903,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "peak_to_average_ratio",
+        "interval": {
+          "level": 0.95,
+          "mean": 7.613115655955595,
+          "low": 6.8893608792116305,
+          "high": 8.33687043269956,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "coincidence_factor",
+        "interval": {
+          "level": 0.95,
+          "mean": 0.9110860097410085,
+          "low": 0.8955886986073267,
+          "high": 0.9265833208746903,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "total_savings_pence",
+        "interval": {
+          "level": 0.95,
+          "mean": 672.3847318080843,
+          "low": 625.9903076440771,
+          "high": 718.7791559720915,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "savings_per_home_pence",
+        "interval": {
+          "level": 0.95,
+          "mean": 84.04809147601054,
+          "low": 78.24878845550964,
+          "high": 89.84739449651144,
+          "replications": 30
+        }
+      }
+    ],
+    "battery": [
+      {
+        "metric": "peak_demand_kw",
+        "left": "with_batteries",
+        "right": "without_batteries",
+        "interval": {
+          "level": 0.95,
+          "mean": 26.1862492471541,
+          "low": 24.762865194108336,
+          "high": 27.609633300199867,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "peak_demand_without_battery_kw",
+        "left": "with_batteries",
+        "right": "without_batteries",
+        "interval": {
+          "level": 0.95,
+          "mean": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "peak_to_average_ratio",
+        "left": "with_batteries",
+        "right": "without_batteries",
+        "interval": {
+          "level": 0.95,
+          "mean": 5.448249772239216,
+          "low": 4.737759049495109,
+          "high": 6.1587404949833235,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "coincidence_factor",
+        "left": "with_batteries",
+        "right": "without_batteries",
+        "interval": {
+          "level": 0.95,
+          "mean": 0.32710293830818044,
+          "low": 0.2914934133923208,
+          "high": 0.36271246322404005,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "total_savings_pence",
+        "left": "with_batteries",
+        "right": "without_batteries",
+        "interval": {
+          "level": 0.95,
+          "mean": 672.3847318080843,
+          "low": 625.9903076440771,
+          "high": 718.7791559720915,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "savings_per_home_pence",
+        "left": "with_batteries",
+        "right": "without_batteries",
+        "interval": {
+          "level": 0.95,
+          "mean": 84.04809147601054,
+          "low": 78.24878845550964,
+          "high": 89.84739449651144,
+          "replications": 30
+        }
+      }
+    ],
+    "diversity": [
+      {
+        "metric": "peak_demand_kw",
+        "left": "diverse",
+        "right": "identical",
+        "interval": {
+          "level": 0.95,
+          "mean": -3.5680200346090505,
+          "low": -4.336948115529944,
+          "high": -2.7990919536881567,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "peak_demand_without_battery_kw",
+        "left": "diverse",
+        "right": "identical",
+        "interval": {
+          "level": 0.95,
+          "mean": 2.3684757858670006e-16,
+          "low": -2.924585464773468e-16,
+          "high": 7.661537036507469e-16,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "peak_to_average_ratio",
+        "left": "diverse",
+        "right": "identical",
+        "interval": {
+          "level": 0.95,
+          "mean": -0.6141137907561761,
+          "low": -0.7591583130557942,
+          "high": -0.469069268456558,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "coincidence_factor",
+        "left": "diverse",
+        "right": "identical",
+        "interval": {
+          "level": 0.95,
+          "mean": -0.08891399025899152,
+          "low": -0.10441130139267335,
+          "high": -0.07341667912530969,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "total_savings_pence",
+        "left": "diverse",
+        "right": "identical",
+        "interval": {
+          "level": 0.95,
+          "mean": -129.8039891014803,
+          "low": -176.5312127086421,
+          "high": -83.07676549431852,
+          "replications": 30
+        }
+      },
+      {
+        "metric": "savings_per_home_pence",
+        "left": "diverse",
+        "right": "identical",
+        "interval": {
+          "level": 0.95,
+          "mean": -16.22549863768504,
+          "low": -22.066401588580263,
+          "high": -10.384595686789815,
+          "replications": 30
+        }
+      }
+    ]
+  },
+  "sweep": {
+    "master_seed": 1,
+    "seeds": [
+      1835504127,
+      1189033389,
+      1596810411,
+      4010755824,
+      3549136632,
+      3025039489,
+      1563021450,
+      4245214700,
+      2579376181,
+      408484264,
+      3151767335,
+      3509411736,
+      1639577730,
+      3553598660,
+      1220005862,
+      3861980557,
+      3755104110,
+      534095829,
+      2567080190,
+      3999303432,
+      2831549899,
+      1084828000,
+      3712744712,
+      2934734566,
+      951605772,
+      3495060231,
+      49018332,
+      3105752741,
+      4208506857,
+      1179198021
+    ],
+    "levels": [
+      {
+        "penetration": 0.0,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {
+              "level": 0.95,
+              "mean": 10.63975241142857,
+              "low": 9.534219920652239,
+              "high": 11.745284902204903,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "peak_to_average_ratio",
+            "interval": {
+              "level": 0.95,
+              "mean": 2.16486588371638,
+              "low": 2.089637673171246,
+              "high": 2.2400940942615137,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "coincidence_factor",
+            "interval": {
+              "level": 0.95,
+              "mean": 0.583983071432828,
+              "low": 0.5565443033848065,
+              "high": 0.6114218394808495,
+              "replications": 30
+            }
+          }
+        ],
+        "peak_minus_no_battery": {
+          "level": 0.95,
+          "mean": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "replications": 30
+        }
+      },
+      {
+        "penetration": 0.1,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {
+              "level": 0.95,
+              "mean": 11.010493081108098,
+              "low": 9.985162887097516,
+              "high": 12.03582327511868,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "peak_to_average_ratio",
+            "interval": {
+              "level": 0.95,
+              "mean": 2.250799636113285,
+              "low": 2.1569020443910296,
+              "high": 2.3446972278355402,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "coincidence_factor",
+            "interval": {
+              "level": 0.95,
+              "mean": 0.5325922511244489,
+              "low": 0.5133336784946583,
+              "high": 0.5518508237542394,
+              "replications": 30
+            }
+          }
+        ],
+        "peak_minus_no_battery": {
+          "level": 0.95,
+          "mean": 0.370740669679526,
+          "low": 0.08659240803150875,
+          "high": 0.6548889313275432,
+          "replications": 30
+        }
+      },
+      {
+        "penetration": 0.25,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {
+              "level": 0.95,
+              "mean": 13.598126839684527,
+              "low": 12.782570366008645,
+              "high": 14.413683313360409,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "peak_to_average_ratio",
+            "interval": {
+              "level": 0.95,
+              "mean": 2.8402516256754367,
+              "low": 2.633039414442139,
+              "high": 3.0474638369087343,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "coincidence_factor",
+            "interval": {
+              "level": 0.95,
+              "mean": 0.5851451748087475,
+              "low": 0.5662152428255782,
+              "high": 0.6040751067919168,
+              "replications": 30
+            }
+          }
+        ],
+        "peak_minus_no_battery": {
+          "level": 0.95,
+          "mean": 2.958374428255955,
+          "low": 2.2772004795815337,
+          "high": 3.6395483769303767,
+          "replications": 30
+        }
+      },
+      {
+        "penetration": 0.5,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {
+              "level": 0.95,
+              "mean": 21.144415612312557,
+              "low": 20.323909308071343,
+              "high": 21.96492191655377,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "peak_to_average_ratio",
+            "interval": {
+              "level": 0.95,
+              "mean": 4.447731861191692,
+              "low": 4.042773118268197,
+              "high": 4.852690604115187,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "coincidence_factor",
+            "interval": {
+              "level": 0.95,
+              "mean": 0.7250439056542269,
+              "low": 0.7068556975270861,
+              "high": 0.7432321137813678,
+              "replications": 30
+            }
+          }
+        ],
+        "peak_minus_no_battery": {
+          "level": 0.95,
+          "mean": 10.504663200883982,
+          "low": 9.449278115894714,
+          "high": 11.56004828587325,
+          "replications": 30
+        }
+      },
+      {
+        "penetration": 0.75,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {
+              "level": 0.95,
+              "mean": 29.11932778614191,
+              "low": 28.092411507386483,
+              "high": 30.146244064897335,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "peak_to_average_ratio",
+            "interval": {
+              "level": 0.95,
+              "mean": 6.074004144530387,
+              "low": 5.505016649451522,
+              "high": 6.642991639609252,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "coincidence_factor",
+            "interval": {
+              "level": 0.95,
+              "mean": 0.8327658028237866,
+              "low": 0.8143468244050437,
+              "high": 0.8511847812425296,
+              "replications": 30
+            }
+          }
+        ],
+        "peak_minus_no_battery": {
+          "level": 0.95,
+          "mean": 18.479575374713338,
+          "low": 17.200452389289403,
+          "high": 19.758698360137274,
+          "replications": 30
+        }
+      },
+      {
+        "penetration": 1.0,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {
+              "level": 0.95,
+              "mean": 36.82600165858267,
+              "low": 35.71760318588964,
+              "high": 37.9344001312757,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "peak_to_average_ratio",
+            "interval": {
+              "level": 0.95,
+              "mean": 7.613115655955595,
+              "low": 6.8893608792116305,
+              "high": 8.33687043269956,
+              "replications": 30
+            }
+          },
+          {
+            "metric": "coincidence_factor",
+            "interval": {
+              "level": 0.95,
+              "mean": 0.9110860097410085,
+              "low": 0.8955886986073267,
+              "high": 0.9265833208746903,
+              "replications": 30
+            }
+          }
+        ],
+        "peak_minus_no_battery": {
+          "level": 0.95,
+          "mean": 26.1862492471541,
+          "low": 24.762865194108336,
+          "high": 27.609633300199867,
+          "replications": 30
+        }
+      }
+    ],
+    "crossing": {
+      "per_replication": [
+        0.1,
+        0.25,
+        0.25,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.25,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.25,
+        0.25,
+        0.1,
+        0.5,
+        0.1,
+        0.25,
+        0.1,
+        0.25,
+        0.25,
+        0.25,
+        0.25,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ],
+      "lowest": 0.1,
+      "highest": 0.5,
+      "interval_above_zero_from": 0.1
+    }
+  }
+}

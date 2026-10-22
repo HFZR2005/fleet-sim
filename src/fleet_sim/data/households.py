@@ -49,9 +49,33 @@ class HouseholdDemandPool:
             household_days.sort(key=lambda item: item.day)
 
     @classmethod
-    def read(cls, path: Path) -> HouseholdDemandPool:
-        """Read complete days from an official Low Carbon London CSV or zip."""
-        return cls(list(_all_days(path)))
+    def read(
+        cls, path: Path, *, max_households: int | None = None
+    ) -> HouseholdDemandPool:
+        """Read complete days from an official Low Carbon London CSV or zip.
+
+        ``max_households`` keeps that many households and then stops. The
+        published file is ordered by household id, so this is the first
+        households in the file, not a random sample.
+        """
+        if max_households is not None:
+            if isinstance(max_households, bool) or not isinstance(max_households, int):
+                raise TypeError(
+                    f"max_households must be an int (got {max_households!r})"
+                )
+            if max_households < 1:
+                raise ValueError(
+                    f"max_households must be at least 1 (got {max_households})"
+                )
+        days: list[_TrialDay] = []
+        seen: set[str] = set()
+        for trial_day in _all_days(path):
+            if trial_day.household_id not in seen:
+                if max_households is not None and len(seen) >= max_households:
+                    break
+                seen.add(trial_day.household_id)
+            days.append(trial_day)
+        return cls(days)
 
     def household_ids(self) -> list[str]:
         """Household identifiers, in a stable order."""
