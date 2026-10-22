@@ -1,4 +1,4 @@
-# [AGENTS.md](http://AGENTS.md)
+# AGENTS.md
 
 Instructions for AI coding agents (Cursor, Claude Code) working in this repository. Human contributors should read CONTRIBUTING.md; this file is the same conventions written for an agent.
 
@@ -15,13 +15,21 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 - Ask before adding any dependency.
 - Finish with a short summary: what changed, why, and any decision you made that the issue didn't specify.
 
-
-
 ## Issues
 
 - Read the issue you're working on with `gh issue view <number>` before planning.
-- Treat its acceptance criteria as the definition of done, and its "Out of scope" section as a hard limit. 
+- Treat its acceptance criteria as the definition of done, and its "Out of scope" section as a hard limit.
 - Don't create, edit, comment on or close issues. Issues close when the PR that says "Closes #<number>" merges.
+
+## Stubs
+
+The codebase may contain stubs: functions that return placeholder data while the real implementation is pending. Placeholder output must never be mistaken for a result.
+
+- Every stub is registered with the `@stub("reason")` decorator. Any function returning placeholder data is a stub, however small.
+- A stub takes and returns the real types for its stage (e.g. `Fleet`, `PowerProfile`, `NodeFeedback`). Don't change an interface just to make a stub easier.
+- Never write unmarked placeholder logic: no hard-coded "realistic-looking" numbers, no simplified versions presented as real. If you can't implement something fully within the issue's scope, leave a marked stub and say so in your summary.
+- When you replace a stub, remove its decorator in the same PR and add tests that would fail against the stub.
+- Outputs produced while any stub is active must say so (`STUB` prefixes, figure watermarks), and `--release` runs fail. Don't remove or weaken these markers.
 
 ## Code conventions
 
@@ -33,8 +41,6 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 - Type everything; `mypy --strict` must pass. `ruff check` and `ruff format` must pass.
 - Prefer clear code over clever code. No metaprogramming, no premature abstraction.
 
-
-
 ## Tests
 
 - Every behaviour change comes with tests in `tests/`.
@@ -42,11 +48,8 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 - Optimiser tests include at least one case small enough to solve by hand, with the expected answer worked out in a comment.
 - Random behaviour takes an explicit seed.
 
-
-
 ## Do not
 
 - Do not commit downloaded data; it is cached outside the repo (see `.gitignore`).
 - Do not set arguments explicitly when the library default is correct.
 - Do not silence type or lint errors with ignores unless the issue says to.
-
