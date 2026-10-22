@@ -16,6 +16,7 @@ from fleet_sim.experiments.report import (
 )
 from fleet_sim.experiments.report import _means as _replication_means
 from fleet_sim.models.scenario import Scenario
+from fleet_sim.progress import NullProgress, RunProgress
 
 # A watt. Solver dust below this does not count as the battery peak exceeding
 # the no-battery peak.
@@ -89,6 +90,7 @@ def run_penetration_sweep(
     pool: HouseholdDemandPool,
     price_source: PriceSource,
     level: float = _LEVEL,
+    progress: RunProgress | None = None,
 ) -> PenetrationSweep:
     """Run every penetration in ``scenario`` for ``scenario.replications`` seeds.
 
@@ -109,7 +111,10 @@ def run_penetration_sweep(
         penetration: {name: [] for name in (*_METRICS, _NO_BATTERY_PEAK)}
         for penetration in penetrations
     }
-    for seed in seeds:
+    reporter = progress if progress is not None else NullProgress()
+    n_days = (scenario.end - scenario.start).days + 1
+    reporter.task("Penetration", len(seeds) * len(penetrations) * n_days)
+    for index, seed in enumerate(seeds, start=1):
         for penetration in penetrations:
             means = _replication_means(
                 scenario,
@@ -118,6 +123,11 @@ def run_penetration_sweep(
                 seed,
                 penetration,
                 scenario.mode,
+                reporter,
+                (
+                    f"replication {index}/{scenario.replications}, "
+                    f"penetration {penetration:.0%}"
+                ),
             )
             for name in samples[penetration]:
                 samples[penetration][name].append(means[name])

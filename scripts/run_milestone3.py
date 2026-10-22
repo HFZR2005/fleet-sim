@@ -23,6 +23,8 @@ from fleet_sim.experiments import (
 from fleet_sim.fleet.network import ROOT_NODE_ID
 from fleet_sim.models.frames import Frame
 from fleet_sim.models.scenario import Scenario
+from fleet_sim.progress import RunProgress
+from fleet_sim.render.progress import ConsoleProgress
 from fleet_sim.scenario import collect_days, load_scenario
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -33,15 +35,22 @@ _REPRESENTATIVE_DAY = date(2026, 1, 8)
 
 
 def main() -> None:
-    pool = HouseholdDemandPool.read(_ZIP, max_households=_POOL_HOUSEHOLDS)
-    prices = AgilePriceSource()
-    diverse = load_scenario(_ROOT / "scenarios" / "diverse.toml")
-    diversity = run_experiment(diverse, pool=pool, price_source=prices)
-    sweep = run_penetration_sweep(
-        load_scenario(_ROOT / "scenarios" / "penetration-sweep.toml"),
-        pool=pool,
-        price_source=prices,
-    )
+    with ConsoleProgress() as progress:
+        pool = HouseholdDemandPool.read(
+            _ZIP, max_households=_POOL_HOUSEHOLDS, progress=progress
+        )
+        prices = AgilePriceSource()
+        diverse = load_scenario(_ROOT / "scenarios" / "diverse.toml")
+        diversity = run_experiment(
+            diverse, pool=pool, price_source=prices, progress=progress
+        )
+        sweep = run_penetration_sweep(
+            load_scenario(_ROOT / "scenarios" / "penetration-sweep.toml"),
+            pool=pool,
+            price_source=prices,
+            progress=progress,
+        )
+        day = _representative_day(diverse, pool, prices, progress)
     payload = {
         "pool_households": _POOL_HOUSEHOLDS,
         "pool_note": (
@@ -53,7 +62,7 @@ def main() -> None:
         "sweep_scenario": "scenarios/penetration-sweep.toml",
         "diversity": diversity.model_dump(mode="json"),
         "sweep": sweep.model_dump(mode="json"),
-        "representative_day": _representative_day(diverse, pool, prices),
+        "representative_day": day,
     }
     _OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     _OUTPUT.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -64,6 +73,7 @@ def _representative_day(
     scenario: Scenario,
     pool: HouseholdDemandPool,
     prices: AgilePriceSource,
+    progress: RunProgress,
 ) -> dict[str, object]:
     """One day of fleet import for replication 0, diverse and identical.
 
@@ -72,6 +82,7 @@ def _representative_day(
     day = _REPRESENTATIVE_DAY
     one_day = scenario.model_copy(update={"start": day, "end": day})
     seed = replication_seed(scenario.seed, 0)
+    progress.task("Representative day", 2)
     return {
         "day": day.isoformat(),
         "replication_index": 0,
@@ -84,6 +95,8 @@ def _representative_day(
                 seed=seed,
                 penetration=1.0,
                 mode="diverse",
+                progress=progress,
+                label="diverse",
             )[2]
         ),
         "identical_import_kw": _import_kw(
@@ -94,6 +107,8 @@ def _representative_day(
                 seed=seed,
                 penetration=1.0,
                 mode="identical",
+                progress=progress,
+                label="identical",
             )[2]
         ),
     }

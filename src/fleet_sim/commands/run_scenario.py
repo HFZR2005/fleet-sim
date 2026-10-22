@@ -31,6 +31,7 @@ from fleet_sim.fleet.network import ROOT_NODE_ID
 from fleet_sim.models.frames import Frame
 from fleet_sim.models.prices import london_day_bounds_utc
 from fleet_sim.models.scenario import RunMetadata, Scenario
+from fleet_sim.progress import RunProgress
 from fleet_sim.scenario import collect_days, git_commit, load_scenario
 from fleet_sim.viz.results import plot_diversity_day, plot_penetration_curve
 from fleet_sim.viz.save import save_figure
@@ -70,6 +71,7 @@ def run_saved_scenario(
     output_dir: Path,
     price_source: PriceSource,
     max_households: int = 100,
+    progress: RunProgress | None = None,
 ) -> ScenarioRun:
     """Run ``scenario_path`` and write frames, metadata, metrics, and figures.
 
@@ -81,21 +83,31 @@ def run_saved_scenario(
     _reject_clock_changes(scenario)
     if not households_path.is_file():
         raise FileNotFoundError(f"household demand not found: {households_path}")
-    pool = HouseholdDemandPool.read(households_path, max_households=max_households)
+    pool = HouseholdDemandPool.read(
+        households_path, max_households=max_households, progress=progress
+    )
     comparison = max(scenario.penetration_levels())
     experiment_scenario = scenario.model_copy(update={"penetration": comparison})
     experiment = run_experiment(
-        experiment_scenario, pool=pool, price_source=price_source
+        experiment_scenario,
+        pool=pool,
+        price_source=price_source,
+        progress=progress,
     )
     sweep = None
     if isinstance(scenario.penetration, list):
-        sweep = run_penetration_sweep(scenario, pool=pool, price_source=price_source)
+        sweep = run_penetration_sweep(
+            scenario, pool=pool, price_source=price_source, progress=progress
+        )
     metadata = RunMetadata(
         scenario=scenario,
         seed=scenario.seed,
         package_version=version(_PACKAGE),
         git_commit=git_commit(),
     )
+    n_days = (scenario.end - scenario.start).days + 1
+    if progress is not None:
+        progress.task("Frames", n_days)
     _days, _fallbacks, frames = collect_days(
         scenario,
         pool=pool,
@@ -103,6 +115,8 @@ def run_saved_scenario(
         seed=scenario.seed,
         penetration=comparison,
         mode=scenario.mode,
+        progress=progress,
+        label="frames",
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     frames_path = output_dir / "frames.json"
@@ -119,8 +133,16 @@ def run_saved_scenario(
     )
     diversity_figure = output_dir / "diversity"
     penetration_figure = output_dir / "penetration"
+    if progress is not None:
+        progress.task("Diversity figure", 2)
     _save_diversity(
-        scenario, pool, price_source, experiment, comparison, diversity_figure
+        scenario,
+        pool,
+        price_source,
+        experiment,
+        comparison,
+        diversity_figure,
+        progress,
     )
     _save_penetration(experiment, comparison, sweep, penetration_figure)
     levels = (
@@ -162,6 +184,7 @@ def _save_diversity(
     experiment: ExperimentReport,
     penetration: float,
     stem: Path,
+    progress: RunProgress | None,
 ) -> None:
     dates = _dates(scenario.start, scenario.end)
     day = dates[len(dates) // 2]
@@ -174,6 +197,8 @@ def _save_diversity(
             seed=scenario.seed,
             penetration=penetration,
             mode="diverse",
+            progress=progress,
+            label="diverse",
         )[2]
     )
     identical = _import_kw(
@@ -184,6 +209,8 @@ def _save_diversity(
             seed=scenario.seed,
             penetration=penetration,
             mode="identical",
+            progress=progress,
+            label="identical",
         )[2]
     )
     difference = _named(experiment.diversity, "peak_demand_kw").interval

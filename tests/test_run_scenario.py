@@ -25,7 +25,9 @@ def test_run_scenario_prints_intervals_and_writes_the_files(
     )
 
     assert code == 0
-    text = capsys.readouterr().out
+    captured = capsys.readouterr()
+    text = captured.out
+    assert "finished in" in captured.err
     assert f"2 homes, region C, {_DAY} to {_DAY}, 2 replications, diverse" in text
     assert "Peak demand (kW)" in text
     assert "Diverse minus identical" in text

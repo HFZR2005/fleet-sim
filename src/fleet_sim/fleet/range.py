@@ -16,6 +16,7 @@ from fleet_sim.fleet.homes import Fleet
 from fleet_sim.fleet.metrics import FleetMetrics, fleet_metrics
 from fleet_sim.fleet.solve import FleetDay, solve_fleet
 from fleet_sim.models.prices import london_day_bounds_utc
+from fleet_sim.progress import RunProgress
 
 
 class DayReport(BaseModel):
@@ -61,12 +62,17 @@ def run_fleet_days(
     end: date,
     region: str,
     price_source: PriceSource,
+    progress: RunProgress | None = None,
 ) -> FleetRange:
     """Solve ``homes`` on every civil day from ``start`` through ``end``."""
     if end < start:
         raise ValueError(f"end {end.isoformat()} is before start {start.isoformat()}")
     reports: list[DayReport] = []
+    if progress is not None:
+        progress.task("Days", (end - start).days + 1)
     for day in _days(start, end):
+        if progress is not None:
+            progress.detail(day.isoformat())
         london_day_bounds_utc(day)
         prices = price_source.load(day, region)
         solution = solve_fleet(homes, prices, None)
@@ -77,6 +83,8 @@ def run_fleet_days(
                 solution=solution,
             )
         )
+        if progress is not None:
+            progress.advance()
     return FleetRange(
         days=reports,
         peak_demand_kw=_spread([report.metrics.peak_demand_kw for report in reports]),

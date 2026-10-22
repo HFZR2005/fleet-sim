@@ -23,6 +23,7 @@ from fleet_sim.models.demand import DemandFallback
 from fleet_sim.models.frames import Frame
 from fleet_sim.models.prices import london_day_bounds_utc
 from fleet_sim.models.scenario import RunMetadata, Scenario
+from fleet_sim.progress import RunProgress
 
 _PACKAGE = "fleet-sim"
 
@@ -104,6 +105,8 @@ def collect_days(
     seed: int,
     penetration: float,
     mode: str,
+    progress: RunProgress | None = None,
+    label: str = "",
 ) -> tuple[list[DayMetrics], list[DemandFallback], list[Frame]]:
     """Solve one fleet over the date range.
 
@@ -127,6 +130,8 @@ def collect_days(
     fallbacks: list[DemandFallback] = []
     frames: list[Frame] = []
     for day in _days(scenario.start, scenario.end):
+        if progress is not None:
+            progress.detail(_unit(label, day.isoformat()))
         london_day_bounds_utc(day)
         prices = price_source.load(day, scenario.region)
         loaded = with_demand(assigned.fleet, pool, day)
@@ -139,7 +144,15 @@ def collect_days(
             DayMetrics(day=day, metrics=fleet_metrics(solution, prices.price_p_per_kwh))
         )
         frames.extend(frames_for_day(prices, solution))
+        if progress is not None:
+            progress.advance()
     return days, fallbacks, frames
+
+
+def _unit(label: str, day: str) -> str:
+    if label:
+        return f"{label}, {day}"
+    return day
 
 
 def _one_penetration(scenario: Scenario) -> float:

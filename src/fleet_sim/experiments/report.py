@@ -17,6 +17,7 @@ from scipy.stats import t
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import PriceSource
 from fleet_sim.models.scenario import Scenario
+from fleet_sim.progress import NullProgress, RunProgress
 from fleet_sim.scenario import DayMetrics, collect_days
 
 _LEVEL = 0.95
@@ -137,6 +138,7 @@ def run_experiment(
     pool: HouseholdDemandPool,
     price_source: PriceSource,
     level: float = _LEVEL,
+    progress: RunProgress | None = None,
 ) -> ExperimentReport:
     """Run ``scenario.replications`` paired passes and report t-intervals.
 
@@ -163,13 +165,44 @@ def run_experiment(
     diverse: dict[str, list[float]] = {name: [] for name in _METRICS}
     identical: dict[str, list[float]] = {name: [] for name in _METRICS}
     other_mode = "identical" if scenario.mode == "diverse" else "diverse"
-    for seed in seeds:
+    reporter = progress if progress is not None else NullProgress()
+    n_days = (scenario.end - scenario.start).days + 1
+    reporter.task("Solving", scenario.replications * 3 * n_days)
+    for index, seed in enumerate(seeds, start=1):
         # Three passes share this seed. The battery comparison keeps the
         # scenario's mode and changes only penetration. The diversity
         # comparison keeps the penetration and changes only the mode.
-        written = _means(scenario, pool, price_source, seed, penetration, scenario.mode)
-        other = _means(scenario, pool, price_source, seed, penetration, other_mode)
-        no_battery = _means(scenario, pool, price_source, seed, 0.0, scenario.mode)
+        label = f"replication {index}/{scenario.replications}"
+        written = _means(
+            scenario,
+            pool,
+            price_source,
+            seed,
+            penetration,
+            scenario.mode,
+            reporter,
+            f"{label}, {scenario.mode}",
+        )
+        other = _means(
+            scenario,
+            pool,
+            price_source,
+            seed,
+            penetration,
+            other_mode,
+            reporter,
+            f"{label}, {other_mode}",
+        )
+        no_battery = _means(
+            scenario,
+            pool,
+            price_source,
+            seed,
+            0.0,
+            scenario.mode,
+            reporter,
+            f"{label}, no battery",
+        )
         for name in _METRICS:
             as_written[name].append(written[name])
             with_battery[name].append(written[name])
@@ -239,6 +272,8 @@ def _means(
     seed: int,
     penetration: float,
     mode: str,
+    progress: RunProgress,
+    label: str,
 ) -> dict[str, float]:
     days, _fallbacks, _frames = collect_days(
         scenario,
@@ -247,6 +282,8 @@ def _means(
         seed=seed,
         penetration=penetration,
         mode=mode,
+        progress=progress,
+        label=label,
     )
     return {name: _mean_over_days(days, name) for name in _METRICS}
 
