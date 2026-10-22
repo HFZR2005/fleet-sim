@@ -13,6 +13,7 @@ from fleet_sim.fleet.frames import frames_for_day, write_frames
 from fleet_sim.fleet.homes import Home, identical_homes
 from fleet_sim.fleet.range import FleetRange, run_fleet_days
 from fleet_sim.models.frames import Frame
+from fleet_sim.progress import RunProgress
 from fleet_sim.viz.herding import plot_daily_peaks, plot_herding
 from fleet_sim.viz.save import save_figure
 
@@ -28,6 +29,7 @@ def run_fleet(
     herding_output: Path,
     peaks_output: Path,
     price_source: PriceSource,
+    progress: RunProgress | None = None,
 ) -> tuple[FleetRange, date]:
     """Solve ``n_homes`` copies of the config from ``start`` through ``end``.
 
@@ -54,6 +56,7 @@ def run_fleet(
         end=end,
         region=region,
         price_source=price_source,
+        progress=progress,
     )
     by_day: list[tuple[date, list[Frame]]] = []
     for day_report in report.days:
@@ -65,8 +68,16 @@ def run_fleet(
     herding_frames = next(
         day_frames for day, day_frames in by_day if day == herding_day
     )
+    if progress is not None:
+        progress.task("Writing figures", 2)
+        progress.detail("herding figure")
     save_figure(plot_herding(herding_frames), herding_output)
+    if progress is not None:
+        progress.advance()
+        progress.detail("peaks figure")
     save_figure(plot_daily_peaks(by_day), peaks_output)
+    if progress is not None:
+        progress.advance()
     return report, herding_day
 
 

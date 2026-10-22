@@ -23,6 +23,7 @@ from fleet_sim.models.demand import (
     HouseholdLoad,
 )
 from fleet_sim.models.home import SLOTS_PER_DAY
+from fleet_sim.progress import RunProgress
 from fleet_sim.random_streams import RandomStreams
 
 _CACHE_DIR = Path(".cache") / "lcl"
@@ -50,7 +51,11 @@ class HouseholdDemandPool:
 
     @classmethod
     def read(
-        cls, path: Path, *, max_households: int | None = None
+        cls,
+        path: Path,
+        *,
+        max_households: int | None = None,
+        progress: RunProgress | None = None,
     ) -> HouseholdDemandPool:
         """Read complete days from an official Low Carbon London CSV or zip.
 
@@ -69,12 +74,24 @@ class HouseholdDemandPool:
                 )
         days: list[_TrialDay] = []
         seen: set[str] = set()
+        if progress is not None:
+            progress.task("Reading households", max_households)
         for trial_day in _all_days(path):
             if trial_day.household_id not in seen:
                 if max_households is not None and len(seen) >= max_households:
                     break
+                if seen and progress is not None:
+                    progress.advance()
                 seen.add(trial_day.household_id)
+                if progress is not None:
+                    progress.detail(
+                        _household_detail(
+                            len(seen), max_households, trial_day.household_id
+                        )
+                    )
             days.append(trial_day)
+        if progress is not None and seen:
+            progress.advance()
         return cls(days)
 
     def household_ids(self) -> list[str]:
@@ -181,6 +198,12 @@ def ingest_low_carbon_london(source: Path, *, cache_dir: Path | None = None) -> 
                 ]
             )
     return target
+
+
+def _household_detail(index: int, total: int | None, household_id: str) -> str:
+    if total is None:
+        return f"household {index} {household_id}"
+    return f"household {index}/{total} {household_id}"
 
 
 def _all_days(path: Path) -> Iterator[_TrialDay]:

@@ -57,8 +57,10 @@ def test_run_fleet_prints_the_summary_and_saves_the_files(
     )
 
     assert code == 0
+    captured = capsys.readouterr()
+    text = captured.out
     assert len(calls) == 1
-    text = capsys.readouterr().out
+    assert "finished in" in captured.err
     assert "2 homes, region C, 2024-06-15 to 2024-06-15" in text
     assert "Peak with batteries (kW)" in text
     assert "Peak without batteries (kW)" in text

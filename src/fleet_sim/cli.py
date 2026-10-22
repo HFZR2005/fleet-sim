@@ -13,6 +13,7 @@ from fleet_sim.commands import run_fleet, run_home, run_saved_scenario
 from fleet_sim.data import AgilePriceSource
 from fleet_sim.models.prices import ClockChangeDayError
 from fleet_sim.render import show_run_fleet, show_run_home, show_run_scenario
+from fleet_sim.render.progress import ConsoleProgress
 
 _OPENER: contextvars.ContextVar[Callable[[str], bytes] | None] = contextvars.ContextVar(
     "fleet_sim_price_opener",
@@ -150,20 +151,22 @@ def run_fleet_command(
 ) -> None:
     """Run identical homes over a date range and save the herding figures."""
     try:
-        report, herding_day = run_fleet(
-            n_homes=n_homes,
-            start=start,
-            end=end,
-            region=region,
-            config_path=config,
-            frames_path=frames,
-            herding_output=herding,
-            peaks_output=peaks,
-            price_source=AgilePriceSource(
-                cache_dir=cache_dir,
-                opener=_OPENER.get(),
-            ),
-        )
+        with ConsoleProgress() as progress:
+            report, herding_day = run_fleet(
+                n_homes=n_homes,
+                start=start,
+                end=end,
+                region=region,
+                config_path=config,
+                frames_path=frames,
+                herding_output=herding,
+                peaks_output=peaks,
+                price_source=AgilePriceSource(
+                    cache_dir=cache_dir,
+                    opener=_OPENER.get(),
+                ),
+                progress=progress,
+            )
     except (ClockChangeDayError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
@@ -201,13 +204,17 @@ def run_scenario_command(
 ) -> None:
     """Run a scenario for its replications and save frames and figures."""
     try:
-        result = run_saved_scenario(
-            scenario,
-            households_path=households,
-            output_dir=output,
-            price_source=AgilePriceSource(cache_dir=cache_dir, opener=_OPENER.get()),
-            max_households=max_households,
-        )
+        with ConsoleProgress() as progress:
+            result = run_saved_scenario(
+                scenario,
+                households_path=households,
+                output_dir=output,
+                price_source=AgilePriceSource(
+                    cache_dir=cache_dir, opener=_OPENER.get()
+                ),
+                max_households=max_households,
+                progress=progress,
+            )
     except (ClockChangeDayError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
