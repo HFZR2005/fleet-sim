@@ -4,7 +4,7 @@ The real generator, with a random stream and standard ratings, is a later
 issue. This split is deterministic and carries no locations.
 """
 
-from fleet_sim.fleet.homes import Fleet, Home
+from fleet_sim.models.fleet import Fleet, Home
 from fleet_sim.models.network import NetworkNode, NetworkSettings, NetworkSpec
 from fleet_sim.stubs import stub
 

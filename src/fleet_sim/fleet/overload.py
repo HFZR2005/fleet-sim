@@ -7,53 +7,13 @@ those zeros.
 
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
-
-from fleet_sim.fleet.network import NodeFeedback
+from fleet_sim.models.network import (
+    DayOverload,
+    NodeFeedback,
+    ReplicationOverload,
+    TransformerOverload,
+)
 from fleet_sim.stubs import stub
-
-
-class TransformerOverload(BaseModel):
-    """One transformer on one day."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    node_id: str
-    peak_utilisation: float
-    overload_energy_kwh: float
-    overloaded_slots: int
-
-
-class DayOverload(BaseModel):
-    """Every transformer on one civil day, plus the hidden-overload share.
-
-    The hidden-overload share is the fraction of slots where the fleet total
-    is inside the sum of the limits but at least one transformer is over its
-    own.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    day: date
-    transformers: list[TransformerOverload]
-    hidden_overload_share: float
-
-
-class ReplicationOverload(BaseModel):
-    """The day's overloads, reduced to one replication.
-
-    ``overload_hour`` is the hour of day in which overloaded slots occur
-    most. It is ``None`` when no slot is overloaded.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    transformers_overloaded_share: float
-    mean_peak_utilisation: float
-    worst_peak_utilisation: float
-    total_overload_energy_kwh: float
-    overload_hour: int | None
-    hidden_overload_share: float
 
 
 @stub("overload metrics are zero")

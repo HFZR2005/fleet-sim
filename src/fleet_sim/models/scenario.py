@@ -15,6 +15,7 @@ from pydantic import (
     model_validator,
 )
 
+from fleet_sim.models.home import SLOTS_PER_DAY, BatterySpec
 from fleet_sim.models.network import NetworkSettings
 from fleet_sim.models.prices import require_gsp_region
 
@@ -55,6 +56,21 @@ class BatteryProductSpec(BaseModel):
         if value <= 0:
             raise ValueError(f"weight must be greater than 0 (got {value})")
         return float(value)
+
+
+class BatteryProduct(BaseModel):
+    """One catalogue entry: a usable capacity and the inverters sold with it.
+
+    ``power_kw`` is conditional on ``capacity_kwh``. Charge and discharge
+    share one of those inverter ratings. ``weight`` is the relative chance
+    of drawing this capacity. The weights in the catalogue are equal.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    capacity_kwh: float
+    power_kw: tuple[float, ...]
+    weight: float
 
 
 class EfficiencyDistribution(BaseModel):
@@ -216,3 +232,46 @@ class RunMetadata(BaseModel):
                 f"seed {self.seed} does not match the scenario seed {self.scenario.seed}"
             )
         return self
+
+
+class RunHomeConfig(BaseModel):
+    """Battery, demand, and rule width for one ``run-home`` invocation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    home_id: str = "home"
+    region: str = "C"
+    transformer_id: str | None = None
+    n: int
+    battery: BatterySpec
+    demand_kw: list[float]
+
+    @field_validator("home_id", "region")
+    @classmethod
+    def identity_is_present(cls, value: str, info: ValidationInfo) -> str:
+        if value == "":
+            name = "value" if info.field_name is None else info.field_name
+            raise ValueError(f"{name} must not be empty")
+        return value
+
+    @field_validator("n")
+    @classmethod
+    def n_is_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError(f"n must be at least 0 (got {value})")
+        return value
+
+    @field_validator("demand_kw")
+    @classmethod
+    def demand_is_a_day_of_non_negative_power(cls, value: list[float]) -> list[float]:
+        if len(value) != SLOTS_PER_DAY:
+            raise ValueError(
+                f"demand_kw must contain {SLOTS_PER_DAY} half-hour values "
+                f"(got {len(value)})"
+            )
+        for item in value:
+            if item < 0:
+                raise ValueError(
+                    f"demand_kw must be at least 0 in every slot (got {item})"
+                )
+        return value

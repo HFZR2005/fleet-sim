@@ -11,40 +11,22 @@ from datetime import date, timedelta
 from importlib.metadata import version
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import PriceSource
 from fleet_sim.fleet.frames import frames_for_day, write_frames
 from fleet_sim.fleet.generate import generate_fleet, mean_fleet, with_demand
-from fleet_sim.fleet.metrics import FleetMetrics, fleet_metrics
+from fleet_sim.fleet.metrics import fleet_metrics
 from fleet_sim.fleet.solve import solve_fleet
 from fleet_sim.models.demand import DemandFallback
 from fleet_sim.models.frames import Frame
 from fleet_sim.models.prices import london_day_bounds_utc
+from fleet_sim.models.results import DayMetrics, ScenarioResult
 from fleet_sim.models.scenario import RunMetadata, Scenario
 from fleet_sim.progress import RunProgress
 
 _PACKAGE = "fleet-sim"
-
-
-class DayMetrics(BaseModel):
-    """One civil day's fleet measures."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    day: date
-    metrics: FleetMetrics
-
-
-class ScenarioResult(BaseModel):
-    """The master-seed pass, and the trial days that had to fall back."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    metadata: RunMetadata
-    days: list[DayMetrics]
-    fallbacks: list[DemandFallback]
 
 
 def load_scenario(path: Path) -> Scenario:

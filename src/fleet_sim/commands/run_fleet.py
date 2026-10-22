@@ -10,9 +10,11 @@ from pathlib import Path
 from fleet_sim.commands.run_home import load_run_home_config
 from fleet_sim.data.source import PriceSource
 from fleet_sim.fleet.frames import frames_for_day, write_frames
-from fleet_sim.fleet.homes import Home, identical_homes
-from fleet_sim.fleet.range import FleetRange, run_fleet_days
+from fleet_sim.fleet.homes import identical_homes
+from fleet_sim.fleet.range import run_fleet_days
+from fleet_sim.models.fleet import Home
 from fleet_sim.models.frames import Frame
+from fleet_sim.models.results import FleetRange
 from fleet_sim.progress import RunProgress
 from fleet_sim.viz.herding import plot_daily_peaks, plot_herding
 from fleet_sim.viz.save import save_figure

@@ -7,11 +7,10 @@ from pathlib import Path
 import pytest
 
 from fleet_sim.cli import main
-from fleet_sim.fleet.metrics import FleetMetrics
-from fleet_sim.fleet.network import NodeFeedback
-from fleet_sim.fleet.range import DayReport, FleetRange, Spread
-from fleet_sim.fleet.solve import FleetDay, SolvedHome
-from fleet_sim.models.schedule import Schedule
+from fleet_sim.models.fleet import FleetDay, SolvedHome
+from fleet_sim.models.home import Schedule
+from fleet_sim.models.network import NodeFeedback
+from fleet_sim.models.results import DayReport, FleetMetrics, FleetRange, Spread
 from fleet_sim.render.run_fleet import run_fleet_view
 
 ROOT = Path(__file__).parents[1]

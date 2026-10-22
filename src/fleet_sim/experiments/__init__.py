@@ -1,20 +1,15 @@
 """Replication means and t-intervals. See ``docs/experiments.md``."""
 
-from fleet_sim.experiments.report import (
+from fleet_sim.experiments.report import replication_seed, run_experiment, t_interval
+from fleet_sim.experiments.sweep import first_crossing, run_penetration_sweep
+from fleet_sim.models.results import (
     ConfidenceInterval,
     ExperimentReport,
+    LevelResult,
     MetricEstimate,
     PairedDifference,
-    replication_seed,
-    run_experiment,
-    t_interval,
-)
-from fleet_sim.experiments.sweep import (
-    LevelResult,
     PeakCrossing,
     PenetrationSweep,
-    first_crossing,
-    run_penetration_sweep,
 )
 
 __all__ = [

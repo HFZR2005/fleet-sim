@@ -8,49 +8,10 @@ it only ever sees a price.
 
 from collections.abc import Sequence
 
-from pydantic import BaseModel, ConfigDict, field_validator
-
-from fleet_sim.models.network import NetworkSpec
+from fleet_sim.models.network import HomeProfile, NetworkSpec, NodeFeedback
 from fleet_sim.stubs import stub
 
 ROOT_NODE_ID = "root"
-
-
-class HomeProfile(BaseModel):
-    """Grid import of one solved home, in kW, one value per slot."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    home_id: str
-    grid_import_kw: list[float]
-
-    @field_validator("grid_import_kw")
-    @classmethod
-    def import_is_non_negative(cls, value: list[float]) -> list[float]:
-        if len(value) == 0:
-            raise ValueError("grid_import_kw must contain at least one slot")
-        for item in value:
-            if item < 0:
-                raise ValueError(
-                    f"grid_import_kw must be at least 0 in every slot (got {item})"
-                )
-        return value
-
-
-class NodeFeedback(BaseModel):
-    """Flow through one network node over the day.
-
-    ``limit_kw`` is ``None`` when the node is unconstrained. ``overload_kw``
-    is how far ``flow_kw`` sits above that limit, and it is zero when there
-    is no limit.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    node_id: str
-    flow_kw: list[float]
-    limit_kw: float | None
-    overload_kw: list[float]
 
 
 def _evaluate_root(node_id: str, profiles: Sequence[HomeProfile]) -> list[NodeFeedback]:

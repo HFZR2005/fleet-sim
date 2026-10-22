@@ -7,7 +7,7 @@ from rich.console import Console, Group
 from rich.table import Table
 from rich.text import Text
 
-from fleet_sim.fleet.range import FleetRange, Spread
+from fleet_sim.models.results import FleetRange, Spread
 
 # The new peak is the one the fleet creates, so it is the bold row.
 _WITH_BATTERY = "bold blue"

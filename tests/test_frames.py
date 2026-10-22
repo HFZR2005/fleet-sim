@@ -5,8 +5,8 @@ from pathlib import Path
 
 from fleet_sim.fleet import FleetDay, SolvedHome
 from fleet_sim.fleet.frames import frames_for_day, read_frames, write_frames
-from fleet_sim.fleet.network import NodeFeedback
 from fleet_sim.models import PriceSeries, Schedule
+from fleet_sim.models.network import NodeFeedback
 
 
 def _schedule() -> Schedule:

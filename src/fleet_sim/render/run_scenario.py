@@ -6,12 +6,12 @@ from rich.console import Console, Group
 from rich.table import Table
 from rich.text import Text
 
-from fleet_sim.experiments.report import (
+from fleet_sim.models.results import (
     ConfidenceInterval,
     MetricEstimate,
     PairedDifference,
+    ScenarioRun,
 )
-from fleet_sim.models.scenario_run import ScenarioRun
 
 _LABELS = {
     "peak_demand_kw": "Peak demand (kW)",

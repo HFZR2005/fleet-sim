@@ -14,8 +14,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import Bounds, LinearConstraint, milp
 
-from fleet_sim.models.home import HomeDay
-from fleet_sim.models.schedule import Schedule
+from fleet_sim.models.home import HomeDay, Schedule
 
 # (DT) in docs/formulation.md. Energy in a slot is power times this factor.
 SLOT_HOURS = 0.5

@@ -4,9 +4,8 @@ The schedule stays inside the one-home constraints in ``docs/formulation.md``:
 (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE), (TERMINAL), and (MODE).
 """
 
-from fleet_sim.models.comparison import ComparisonReport
-from fleet_sim.models.home import BatterySpec, HomeDay
-from fleet_sim.models.schedule import Schedule
+from fleet_sim.models.home import BatterySpec, HomeDay, Schedule
+from fleet_sim.models.results import ComparisonReport
 from fleet_sim.optimise.home import SLOT_HOURS, optimise_home
 
 # Bills within this many pence are the same saving. Flat prices make the

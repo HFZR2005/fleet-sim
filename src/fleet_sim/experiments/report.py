@@ -8,17 +8,22 @@ derived seed is used for every condition in that replication. See
 
 import math
 from collections.abc import Sequence
-from typing import Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict
 from scipy.stats import t
 
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import PriceSource
+from fleet_sim.models.results import (
+    ConfidenceInterval,
+    DayMetrics,
+    ExperimentReport,
+    MetricEstimate,
+    PairedDifference,
+)
 from fleet_sim.models.scenario import Scenario
 from fleet_sim.progress import NullProgress, RunProgress
-from fleet_sim.scenario import DayMetrics, collect_days
+from fleet_sim.scenario import collect_days
 
 _LEVEL = 0.95
 _METRICS = (
@@ -29,63 +34,6 @@ _METRICS = (
     "total_savings_pence",
     "savings_per_home_pence",
 )
-ComparisonName = Literal["with_batteries", "without_batteries", "diverse", "identical"]
-
-
-class ConfidenceInterval(BaseModel):
-    """A t-interval for the mean of independent replications.
-
-    ``low`` and ``high`` are the ends of the interval at ``level``. With
-    the usual 0.95, they are mean ± t * s / sqrt(R), and t is the 0.975
-    quantile of a t distribution with R - 1 degrees of freedom.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    level: float
-    mean: float
-    low: float
-    high: float
-    replications: int
-
-
-class MetricEstimate(BaseModel):
-    """One metric of the scenario as it was written."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    metric: str
-    interval: ConfidenceInterval
-
-
-class PairedDifference(BaseModel):
-    """The interval for the mean of ``left - right``, paired by seed."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    metric: str
-    left: ComparisonName
-    right: ComparisonName
-    interval: ConfidenceInterval
-
-
-class ExperimentReport(BaseModel):
-    """Replication means for the scenario, and the two paired comparisons.
-
-    ``battery`` is with batteries minus without, in the scenario's mode.
-    ``diversity`` is diverse minus identical, at the scenario's penetration.
-    ``without_batteries`` is the penetration-0 pass in the scenario's mode.
-    ``seeds[i]`` is the master seed of replication ``i``.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    master_seed: int
-    seeds: list[int]
-    metrics: list[MetricEstimate]
-    without_batteries: list[MetricEstimate]
-    battery: list[PairedDifference]
-    diversity: list[PairedDifference]
 
 
 def replication_seed(master: int, index: int) -> int:
