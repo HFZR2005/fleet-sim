@@ -9,8 +9,7 @@ from datetime import date, timedelta
 from importlib.metadata import version
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
-
+from fleet_sim.commands.network import run_network_scenario
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import PriceSource
 from fleet_sim.experiments.report import (
@@ -22,7 +21,6 @@ from fleet_sim.experiments.report import (
 )
 from fleet_sim.experiments.sweep import (
     LevelResult,
-    PeakCrossing,
     PenetrationSweep,
     run_penetration_sweep,
 )
@@ -31,37 +29,13 @@ from fleet_sim.fleet.network import ROOT_NODE_ID
 from fleet_sim.models.frames import Frame
 from fleet_sim.models.prices import london_day_bounds_utc
 from fleet_sim.models.scenario import RunMetadata, Scenario
+from fleet_sim.models.scenario_run import ScenarioRun
 from fleet_sim.progress import RunProgress
 from fleet_sim.scenario import collect_days, git_commit, load_scenario
 from fleet_sim.viz.results import plot_diversity_day, plot_penetration_curve
 from fleet_sim.viz.save import save_figure
 
 _PACKAGE = "fleet-sim"
-
-
-class ScenarioRun(BaseModel):
-    """What ``run-scenario`` printed and where it wrote."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    n_homes: int
-    region: str
-    start: date
-    end: date
-    replications: int
-    mode: str
-    penetration: float
-    metrics: list[MetricEstimate]
-    without_batteries: list[MetricEstimate]
-    diversity: list[PairedDifference]
-    battery: list[PairedDifference]
-    levels: list[LevelResult]
-    crossing: PeakCrossing | None
-    frames_path: Path
-    metadata_path: Path
-    metrics_path: Path
-    diversity_figure: Path
-    penetration_figure: Path
 
 
 def run_saved_scenario(
@@ -72,6 +46,7 @@ def run_saved_scenario(
     price_source: PriceSource,
     max_households: int = 100,
     progress: RunProgress | None = None,
+    release: bool = False,
 ) -> ScenarioRun:
     """Run ``scenario_path`` and write frames, metadata, metrics, and figures.
 
@@ -86,6 +61,15 @@ def run_saved_scenario(
     pool = HouseholdDemandPool.read(
         households_path, max_households=max_households, progress=progress
     )
+    if scenario.network is not None:
+        return run_network_scenario(
+            scenario,
+            pool=pool,
+            price_source=price_source,
+            output_dir=output_dir,
+            progress=progress,
+            release=release,
+        )
     comparison = max(scenario.penetration_levels())
     experiment_scenario = scenario.model_copy(update={"penetration": comparison})
     experiment = run_experiment(
