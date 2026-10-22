@@ -1,0 +1,39 @@
+{
+  "diversity": {
+    "diversity": [
+      {
+        "metric": "peak_demand_kw",
+        "interval": {"mean": -1.5, "low": -2.0, "high": -1.0}
+      }
+    ]
+  },
+  "sweep": {
+    "levels": [
+      {
+        "penetration": 0.0,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {"mean": 10.0, "low": 9.0, "high": 11.0}
+          }
+        ],
+        "peak_without_battery": {"mean": 10.0, "low": 9.0, "high": 11.0}
+      },
+      {
+        "penetration": 1.0,
+        "metrics": [
+          {
+            "metric": "peak_demand_kw",
+            "interval": {"mean": 30.0, "low": 28.0, "high": 32.0}
+          }
+        ],
+        "peak_without_battery": {"mean": 10.0, "low": 9.0, "high": 11.0}
+      }
+    ]
+  },
+  "representative_day": {
+    "day": "2026-01-08",
+    "diverse_import_kw": [1.0, 2.0, 4.0, 1.0],
+    "identical_import_kw": [1.0, 3.0, 6.0, 2.0]
+  }
+}

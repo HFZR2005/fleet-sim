@@ -36,6 +36,7 @@ class LevelResult(BaseModel):
 
     penetration: float
     metrics: list[MetricEstimate]
+    peak_without_battery: ConfidenceInterval
     peak_minus_no_battery: ConfidenceInterval
 
 
@@ -148,6 +149,7 @@ def _level_result(
             MetricEstimate(metric=name, interval=t_interval(samples[name], level=level))
             for name in _METRICS
         ],
+        peak_without_battery=t_interval(samples[_NO_BATTERY_PEAK], level=level),
         peak_minus_no_battery=t_interval(difference, level=level),
     )
 

@@ -2,7 +2,7 @@
 
 Eight homes, region C, 5–11 January 2026. Master seed 1, 30 replications. Each number below is the mean of those 30 replications, and the range in brackets is the 95% t-interval. A replication draws one fleet and the reported metric is the mean of that fleet over the seven days.
 
-`scenarios/diverse.toml` is the diverse fleet at full penetration. `scenarios/identical.toml` is the paired identical fleet: same seed, dates, size, and battery catalogue, with every home a copy of the mean. `scenarios/penetration-sweep.toml` is the diverse fleet at 0, 10, 25, 50, 75, and 100%. The machine-readable intervals are in `docs/results/milestone-3.json`.
+`scenarios/diverse.toml` is the diverse fleet at full penetration. `scenarios/identical.toml` is the paired identical fleet: same seed, dates, size, and battery catalogue, with every home a copy of the mean. `scenarios/penetration-sweep.toml` is the diverse fleet at 0, 10, 25, 50, 75, and 100%. The machine-readable intervals are in `docs/results/milestone-3.json`. `docs/penetration.svg` is the peak against penetration. `docs/diversity.svg` is grid import on 8 January 2026 for replication 0. The difference printed on that chart is the 30-replication interval below, not the gap between the two lines on that one day.
 
 Demand is the first 100 households in the Low Carbon London file, in file order, not a random sample of all 5,567. The trial is 2011–2014, before heat pumps and electric vehicles were common, so these shapes understate winter peaks from those loads.
 
