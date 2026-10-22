@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Protocol
 
-from fleet_sim.models.demand import DemandSeries
+from fleet_sim.models.demand import DemandSeries, ElexonSeason
 from fleet_sim.models.home import SLOTS_PER_DAY
 
 # (DT) in docs/formulation.md. The published profile is average kW, and a
@@ -94,10 +94,10 @@ def _column_name(day: date) -> str:
         day_type = "Sun"
     else:
         day_type = "Wd"
-    return f"{_season(day)} {day_type}"
+    return f"{elexon_season(day)} {day_type}"
 
 
-def _season(day: date) -> str:
+def elexon_season(day: date) -> ElexonSeason:
     """Elexon season for ``day``: Wtr, Spr, Smr, Hsr, or Aut.
 
     Winter runs from the autumn clock change through the day before the
