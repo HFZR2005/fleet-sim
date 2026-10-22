@@ -1,8 +1,7 @@
 """Load a scenario file and run it once from its master seed.
 
-``replications`` is recorded and checked. Repeating the run, and walking a
-list of penetrations, are later issues. This run is the master-seed pass
-over the date range.
+Repeating that run is ``fleet_sim.experiments``. Walking a list of
+penetrations is a later issue. This module is the one pass over the date range.
 """
 
 import json
@@ -21,6 +20,7 @@ from fleet_sim.fleet.generate import generate_fleet, mean_fleet, with_demand
 from fleet_sim.fleet.metrics import FleetMetrics, fleet_metrics
 from fleet_sim.fleet.solve import solve_fleet
 from fleet_sim.models.demand import DemandFallback
+from fleet_sim.models.frames import Frame
 from fleet_sim.models.prices import london_day_bounds_utc
 from fleet_sim.models.scenario import RunMetadata, Scenario
 
@@ -74,50 +74,82 @@ def run_scenario(
     mean of that day's homes. A scenario that names several penetrations
     is not run here.
     """
-    levels = scenario.penetration_levels()
-    if len(levels) != 1:
-        raise ValueError(
-            "this run takes one penetration; "
-            f"a sweep over {len(levels)} values is a later step"
-        )
+    days, fallbacks, frames = collect_days(
+        scenario,
+        pool=pool,
+        price_source=price_source,
+        seed=scenario.seed,
+        penetration=_one_penetration(scenario),
+        mode=scenario.mode,
+    )
     metadata = RunMetadata(
         scenario=scenario,
         seed=scenario.seed,
         package_version=version(_PACKAGE),
         git_commit=git_commit(),
     )
-    assigned = generate_fleet(
-        pool,
-        scenario.start,
-        scenario.n_homes,
-        scenario.seed,
-        levels[0],
-        region=scenario.region,
-        mode="diverse",
-        distribution=scenario.battery,
-    )
-    days: list[DayMetrics] = []
-    fallbacks: list[DemandFallback] = []
-    frames = []
-    for day in _days(scenario.start, scenario.end):
-        london_day_bounds_utc(day)
-        prices = price_source.load(day, scenario.region)
-        loaded = with_demand(assigned.fleet, pool, day)
-        fallbacks.extend(loaded.fallbacks)
-        fleet = loaded.fleet
-        if scenario.mode == "identical":
-            fleet = mean_fleet(fleet)
-        solution = solve_fleet(fleet, prices, None)
-        days.append(
-            DayMetrics(day=day, metrics=fleet_metrics(solution, prices.price_p_per_kwh))
-        )
-        frames.extend(frames_for_day(prices, solution))
     result = ScenarioResult(metadata=metadata, days=days, fallbacks=fallbacks)
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_model(output_dir / "metadata.json", metadata)
     _write_model(output_dir / "metrics.json", result)
     write_frames(output_dir / "frames.json", frames, metadata=metadata)
     return result
+
+
+def collect_days(
+    scenario: Scenario,
+    *,
+    pool: HouseholdDemandPool,
+    price_source: PriceSource,
+    seed: int,
+    penetration: float,
+    mode: str,
+) -> tuple[list[DayMetrics], list[DemandFallback], list[Frame]]:
+    """Solve one fleet over the date range.
+
+    ``seed`` is the master seed for this pass. It is the scenario seed for
+    a single run, and a derived seed for one replication. ``mode`` is
+    ``diverse`` or ``identical``.
+    """
+    if mode not in ("diverse", "identical"):
+        raise ValueError(f"mode must be 'diverse' or 'identical' (got {mode!r})")
+    assigned = generate_fleet(
+        pool,
+        scenario.start,
+        scenario.n_homes,
+        seed,
+        penetration,
+        region=scenario.region,
+        mode="diverse",
+        distribution=scenario.battery,
+    )
+    days: list[DayMetrics] = []
+    fallbacks: list[DemandFallback] = []
+    frames: list[Frame] = []
+    for day in _days(scenario.start, scenario.end):
+        london_day_bounds_utc(day)
+        prices = price_source.load(day, scenario.region)
+        loaded = with_demand(assigned.fleet, pool, day)
+        fallbacks.extend(loaded.fallbacks)
+        fleet = loaded.fleet
+        if mode == "identical":
+            fleet = mean_fleet(fleet)
+        solution = solve_fleet(fleet, prices, None)
+        days.append(
+            DayMetrics(day=day, metrics=fleet_metrics(solution, prices.price_p_per_kwh))
+        )
+        frames.extend(frames_for_day(prices, solution))
+    return days, fallbacks, frames
+
+
+def _one_penetration(scenario: Scenario) -> float:
+    levels = scenario.penetration_levels()
+    if len(levels) != 1:
+        raise ValueError(
+            "this run takes one penetration; "
+            f"a sweep over {len(levels)} values is a later step"
+        )
+    return levels[0]
 
 
 def read_metadata(path: Path) -> RunMetadata:

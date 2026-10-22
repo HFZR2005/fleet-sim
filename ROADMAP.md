@@ -12,7 +12,7 @@ What new peak appears when many identical batteries each optimise alone? Done wh
 
 ## Milestone 3
 
-How large is the new peak, and how wide is the spread, when homes are no longer copies? Homes differ, drawn at random from a smart-meter demand profile, and the report is a confidence interval rather than the min and max of identical copies.
+How large is the new peak, and how wide is the spread, when homes are no longer copies? Done. `fleet-sim run-scenario scenarios/diverse.toml` runs a diverse fleet for the scenario's replications, prints each metric as a mean with a 95% interval, and writes frames, metadata, and figures. Homes are drawn from Low Carbon London households rather than copied from one profile.
 
 ## Milestone 4
 
