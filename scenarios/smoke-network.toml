@@ -1,0 +1,50 @@
+# Two homes, one on each transformer, for one day.
+# The Low Carbon London fixture used in tests has two households, so this
+# smoke run stays within that pool. rho, admd, ratings, and the box are
+# recorded for later issues and ignored by the topology stub.
+
+n_homes = 2
+penetration = 0.0
+mode = "diverse"
+region = "C"
+start = 2024-06-15
+end = 2024-06-15
+seed = 1
+replications = 2
+
+[network]
+n_transformers = 2
+limit_kw = 0.001
+rho = 0.0
+admd_kw = 1.5
+headroom = 1.2
+power_factor = 0.95
+ratings_kva = [25.0, 50.0, 100.0]
+lat_min = 51.3
+lat_max = 51.7
+lon_min = -0.3
+lon_max = 0.1
+
+[battery]
+soc_initial = 0.5
+
+[[battery.products]]
+capacity_kwh = 5.0
+power_kw = [3.6]
+weight = 1.0
+
+[[battery.products]]
+capacity_kwh = 10.0
+power_kw = [3.6, 5.0]
+weight = 1.0
+
+[[battery.products]]
+capacity_kwh = 13.5
+power_kw = [5.0]
+weight = 1.0
+
+[battery.efficiency]
+mean = 0.95
+standard_deviation = 0.01
+low = 0.92
+high = 0.97

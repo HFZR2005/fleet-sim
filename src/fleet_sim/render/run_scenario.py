@@ -6,12 +6,12 @@ from rich.console import Console, Group
 from rich.table import Table
 from rich.text import Text
 
-from fleet_sim.commands.run_scenario import ScenarioRun
 from fleet_sim.experiments.report import (
     ConfidenceInterval,
     MetricEstimate,
     PairedDifference,
 )
+from fleet_sim.models.scenario_run import ScenarioRun
 
 _LABELS = {
     "peak_demand_kw": "Peak demand (kW)",
@@ -25,29 +25,41 @@ _LABELS = {
 
 def run_scenario_view(result: ScenarioRun) -> Group:
     """Each metric's interval, then the files the run wrote."""
+    prefix = "STUB " if result.stubs else ""
     heading = Text(
-        f"{result.n_homes} homes, region {result.region}, "
+        f"{prefix}{result.n_homes} homes, region {result.region}, "
         f"{result.start.isoformat()} to {result.end.isoformat()}, "
         f"{result.replications} replications, {result.mode}"
     )
-    blocks: list[Table | Text] = [
-        heading,
-        _metric_table("Scenario", result.metrics),
-        _metric_table("Without batteries", result.without_batteries),
-        _difference_table("Diverse minus identical", result.diversity),
-        _difference_table("With batteries minus without", result.battery),
-    ]
+    blocks: list[Table | Text] = [heading]
+    if result.metrics:
+        title = "STUB overload" if result.stubs else "Scenario"
+        blocks.append(_metric_table(title, result.metrics))
+    if result.without_batteries:
+        blocks.append(_metric_table("Without batteries", result.without_batteries))
+    if result.diversity:
+        blocks.append(_difference_table("Diverse minus identical", result.diversity))
+    if result.battery:
+        blocks.append(_difference_table("With batteries minus without", result.battery))
     if len(result.levels) > 1:
         blocks.append(_penetration_table(result))
+    if result.stubs:
+        listed = Text("Active stubs", style="bold")
+        listed.append("\n" + "\n".join(result.stubs))
+        blocks.append(listed)
     blocks.extend(
         [
             _path_line("Frames", result.frames_path),
             _path_line("Metadata", result.metadata_path),
             _path_line("Metrics", result.metrics_path),
-            _path_line("Diversity figure", result.diversity_figure),
-            _path_line("Penetration figure", result.penetration_figure),
         ]
     )
+    if result.diversity_figure is not None:
+        blocks.append(_path_line("Diversity figure", result.diversity_figure))
+    if result.penetration_figure is not None:
+        blocks.append(_path_line("Penetration figure", result.penetration_figure))
+    if result.overload_figure is not None:
+        blocks.append(_path_line("Overload figure", result.overload_figure))
     return Group(*blocks)
 
 

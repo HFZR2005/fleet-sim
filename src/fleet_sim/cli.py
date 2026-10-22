@@ -201,6 +201,10 @@ def run_scenario_command(
             show_default=False,
         ),
     ] = None,
+    release: Annotated[
+        bool,
+        typer.Option("--release", help="Refuse to finish while a stub is active"),
+    ] = False,
 ) -> None:
     """Run a scenario for its replications and save frames and figures."""
     try:
@@ -214,6 +218,7 @@ def run_scenario_command(
                 ),
                 max_households=max_households,
                 progress=progress,
+                release=release,
             )
     except (ClockChangeDayError, FileNotFoundError, ValueError) as exc:
         typer.echo(str(exc), err=True)

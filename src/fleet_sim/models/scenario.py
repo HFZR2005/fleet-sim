@@ -15,6 +15,7 @@ from pydantic import (
     model_validator,
 )
 
+from fleet_sim.models.network import NetworkSettings
 from fleet_sim.models.prices import require_gsp_region
 
 FleetMode = Literal["diverse", "identical"]
@@ -131,6 +132,7 @@ class Scenario(BaseModel):
     seed: int
     replications: int
     battery: BatteryDistribution
+    network: NetworkSettings | None = None
 
     @field_validator("n_homes", "replications", "seed", mode="before")
     @classmethod
