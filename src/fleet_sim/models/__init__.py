@@ -1,5 +1,5 @@
 from fleet_sim.models.comparison import ComparisonReport
-from fleet_sim.models.demand import DemandSeries
+from fleet_sim.models.demand import DemandFallback, DemandSeries, HouseholdLoad
 from fleet_sim.models.frames import Frame, FrameLog, HomeFrame, NodeFrame
 from fleet_sim.models.home import BatterySpec, HomeDay
 from fleet_sim.models.prices import ClockChangeDayError, PriceSeries
@@ -9,11 +9,13 @@ __all__ = [
     "BatterySpec",
     "ClockChangeDayError",
     "ComparisonReport",
+    "DemandFallback",
     "DemandSeries",
     "Frame",
     "FrameLog",
     "HomeDay",
     "HomeFrame",
+    "HouseholdLoad",
     "NodeFrame",
     "PriceSeries",
     "Schedule",
