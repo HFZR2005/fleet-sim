@@ -44,8 +44,11 @@ def solve_fleet(
     """Solve each home against ``prices`` and report the root-node flow.
 
     ``signals`` is one price adjustment per home, in the same order as
-    ``homes``. ``None`` leaves every adjustment at zero. The network is one
-    unconstrained root, and every home sits under it.
+    ``homes``. ``None`` leaves every adjustment at zero. A home with no
+    battery is not optimised: its import equals its demand, and the schedule
+    has the same fields as an optimised home, so the network adds every home
+    the same way. The network is one unconstrained root, and every home sits
+    under it.
     """
     adjustments = _adjustments(homes, signals)
     solved: list[SolvedHome] = []
@@ -56,17 +59,23 @@ def solve_fleet(
             raise ValueError(
                 f"home {home.home_id} is in region {region}, not {prices.region}"
             )
-        schedule = optimise_home(
-            HomeDay(
-                home_id=home.home_id,
-                region=region,
-                transformer_id=home.transformer_id,
-                battery=home.battery,
-                demand_kw=list(home.demand_kw),
-                price_p_per_kwh=list(prices.price_p_per_kwh),
-            ),
-            adjustment,
-        )
+        battery = home.battery
+        if battery is None:
+            schedule = _demand_only_schedule(
+                list(home.demand_kw), list(prices.price_p_per_kwh)
+            )
+        else:
+            schedule = optimise_home(
+                HomeDay(
+                    home_id=home.home_id,
+                    region=region,
+                    transformer_id=home.transformer_id,
+                    battery=battery,
+                    demand_kw=list(home.demand_kw),
+                    price_p_per_kwh=list(prices.price_p_per_kwh),
+                ),
+                adjustment,
+            )
         solved.append(
             SolvedHome(
                 home_id=home.home_id,
@@ -79,6 +88,31 @@ def solve_fleet(
             HomeProfile(home_id=home.home_id, grid_import_kw=schedule.grid_import_kw)
         )
     return FleetDay(homes=solved, nodes=Network().evaluate(profiles))
+
+
+def _demand_only_schedule(
+    demand_kw: list[float], price_p_per_kwh: list[float]
+) -> Schedule:
+    """Import the demand and leave the battery idle.
+
+    With no battery, ``g_t = L_t``. The tariff bill is the sum of
+    ``p_t * g_t * 0.5``, which is (COST) in ``docs/formulation.md`` when
+    every adjustment is zero and there is nothing to store. State of charge
+    is reported as 0. ``0.5`` is (DT).
+    """
+    slots = len(demand_kw)
+    cost_pence = sum(
+        price * demand * 0.5
+        for price, demand in zip(price_p_per_kwh, demand_kw, strict=True)
+    )
+    return Schedule(
+        charge_kw=[0.0] * slots,
+        discharge_kw=[0.0] * slots,
+        grid_import_kw=list(demand_kw),
+        soc=[0.0] * slots,
+        charge_mode=[0] * slots,
+        cost_pence=cost_pence,
+    )
 
 
 def _adjustments(

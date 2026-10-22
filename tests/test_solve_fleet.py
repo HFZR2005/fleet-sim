@@ -68,6 +68,30 @@ def test_root_flow_is_the_sum_of_home_imports_and_never_overloads() -> None:
     assert day.homes[1].schedule.grid_import_kw == pytest.approx([3.0] * 48)
 
 
+def test_a_home_without_a_battery_imports_its_demand() -> None:
+    # No store, so g_t = L_t. Demand is 1.5 kW and the price is 10 p/kWh,
+    # so the bill is 48 * 10 * 1.5 * 0.5 = 360 pence. Charge and discharge
+    # stay at 0, and the root flow is that same 1.5 kW.
+    fleet = Fleet(
+        homes=[
+            Home(
+                home_id="home-1",
+                region="C",
+                demand_kw=[1.5] * 48,
+            )
+        ]
+    )
+
+    day = solve_fleet(fleet, _prices([10.0] * 48), None)
+    schedule = day.homes[0].schedule
+
+    assert schedule.grid_import_kw == pytest.approx([1.5] * 48)
+    assert schedule.charge_kw == [0.0] * 48
+    assert schedule.discharge_kw == [0.0] * 48
+    assert schedule.cost_pence == pytest.approx(360.0)
+    assert day.nodes[0].flow_kw == pytest.approx([1.5] * 48)
+
+
 def test_network_adds_profiles_slot_by_slot() -> None:
     feedback = Network().evaluate(
         [
