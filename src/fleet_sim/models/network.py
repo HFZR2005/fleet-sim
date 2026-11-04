@@ -130,10 +130,11 @@ class NetworkSettings(BaseModel):
     use. They are accepted and ignored until those stubs are replaced.
     """
 
+    #TODO: document what each parameter here is for, or where to find definitions.
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     n_transformers: int
-    limit_kw: float
+    limit_kw: float | None = None
     rho: float = 0.0
     admd_kw: float = 1.0
     headroom: float = 1.0
@@ -158,7 +159,18 @@ class NetworkSettings(BaseModel):
             raise ValueError(f"n_transformers must be at least 1 (got {value})")
         return value
 
-    @field_validator("limit_kw", "admd_kw", "headroom")
+    @field_validator("limit_kw")
+    @classmethod
+    def limit_is_positive_or_none(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise TypeError(f"limit_kw must be a number (got {value!r})")
+        if value <= 0:
+            raise ValueError(f"limit_kw must be greater than 0 (got {value})")
+        return float(value)
+
+    @field_validator("admd_kw", "headroom")
     @classmethod
     def positive_quantities(cls, value: float, info: ValidationInfo) -> float:
         name = "value" if info.field_name is None else info.field_name

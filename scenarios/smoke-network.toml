@@ -1,7 +1,8 @@
-# Two homes, one on each transformer, for one day.
+# Two homes on two transformers, for one day.
 # The Low Carbon London fixture used in tests has two households, so this
-# smoke run stays within that pool. rho, admd, ratings, and the box are
-# recorded for later issues and ignored by the topology stub.
+# smoke run stays within that pool. The ratings are deliberately tiny so
+# the computed limits sit below the homes' actual demand, which forces
+# overload in every slot and exercises the whole pipeline.
 
 n_homes = 2
 penetration = 0.0
@@ -14,12 +15,11 @@ replications = 2
 
 [network]
 n_transformers = 2
-limit_kw = 0.001
 rho = 0.0
-admd_kw = 1.5
-headroom = 1.2
-power_factor = 0.95
-ratings_kva = [25.0, 50.0, 100.0]
+admd_kw = 0.001
+headroom = 1.0
+power_factor = 1.0
+ratings_kva = [0.001]
 lat_min = 51.3
 lat_max = 51.7
 lon_min = -0.3
