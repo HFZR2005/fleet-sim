@@ -83,6 +83,8 @@ def run_network_scenario(
             region=scenario.region,
             mode="diverse",
             distribution=scenario.battery,
+            transformer_map=spec.home_transformer,
+            rho=settings.rho,
         )
         base = assign_transformers(generated.fleet, spec)
         day_reports = []

@@ -28,6 +28,22 @@ Penetration `p` gives a battery to `floor(p * N + 0.5)` homes, halfway cases rou
 
 The draw does not look at the home's demand. A household is assigned from the `demand` stream and a product from the `battery` stream, and neither draw is conditioned on the other. Real ownership may well follow the house, the income, or the size of the load. That coupling is a possible refinement. It is not in this generator.
 
+## Clustered ownership
+
+Neighbours tend to adopt batteries together: word of mouth, the same installer, the same street. The scenario parameter ρ (`rho`, in [0, 1]) controls how much ownership clusters by transformer.
+
+Each home's ownership score mixes two components:
+
+    score = ρ × transformer_draw + (1 − ρ) × individual_draw
+
+The individual draw is the home's own uniform number from the `penetration` stream (the same draw as in the unclustered case). The transformer draw is one uniform number per transformer, drawn from the `ownership-cluster` stream and shared by every home on that transformer.
+
+Homes are ranked by score. At penetration p, the top `round(p × N)` homes own batteries. This preserves exact counts and nesting for any ρ.
+
+With ρ = 0, the score equals the individual draw, so ownership is identical to the unclustered case for the same seed. With ρ = 1, all homes on a transformer share the same score, so they all adopt or all do not: penetration varies sharply between transformers. Intermediate ρ gives partial clustering.
+
+ρ is a modelling choice, not a measured value. There is no UK dataset that calibrates how much battery adoption clusters at the transformer level. Setting ρ to zero recovers the uniform case; setting it higher explores how clustering amplifies transformer stress.
+
 ## Identical homes
 
 Identical mode builds the diverse fleet, then replaces it with N copies of the mean home. Demand in each slot is the mean of the diverse homes' demand. The battery is the mean of the batteries the diverse fleet actually owns. If none own one, the copies have none. If some own one, every copy gets that mean battery, so the homes are actually identical. A diversity comparison that should keep the same number of batteries wants a penetration of 1, where every diverse home already has one.
