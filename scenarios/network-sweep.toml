@@ -1,7 +1,7 @@
 # Overload metrics against penetration on a network. Same topology as
 # network.toml. Change rho to 0.8 for the clustered comparison.
 
-n_homes = 8
+n_homes = 50
 penetration = [0.0, 0.1, 0.25, 0.5, 0.75, 1.0]
 mode = "diverse"
 region = "C"

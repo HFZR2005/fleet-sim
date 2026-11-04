@@ -1,0 +1,1111 @@
+{
+  "stubs": [
+    "plot_network_overload: the network figure is a watermarked placeholder"
+  ],
+  "overload": [
+    {
+      "metric": "transformers_overloaded_share",
+      "interval": {
+        "level": 0.95,
+        "mean": 1.0,
+        "low": 1.0,
+        "high": 1.0,
+        "replications": 30
+      }
+    },
+    {
+      "metric": "mean_peak_utilisation",
+      "interval": {
+        "level": 0.95,
+        "mean": 1.663351415394554,
+        "low": 1.6441796791085785,
+        "high": 1.6825231516805292,
+        "replications": 30
+      }
+    },
+    {
+      "metric": "worst_peak_utilisation",
+      "interval": {
+        "level": 0.95,
+        "mean": 2.163950506753409,
+        "low": 2.1202952041905174,
+        "high": 2.2076058093163002,
+        "replications": 30
+      }
+    },
+    {
+      "metric": "total_overload_energy_kwh",
+      "interval": {
+        "level": 0.95,
+        "mean": 548.7520110668962,
+        "low": 517.0250731817189,
+        "high": 580.4789489520736,
+        "replications": 30
+      }
+    },
+    {
+      "metric": "hidden_overload_share",
+      "interval": {
+        "level": 0.95,
+        "mean": 0.02222222222222222,
+        "low": 0.018809543746943914,
+        "high": 0.025634900697500525,
+        "replications": 30
+      }
+    }
+  ],
+  "network_levels": [
+    {
+      "penetration": 0.0,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4317673191177945,
+            "low": 0.41775452877830355,
+            "high": 0.4457801094572854,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6878315831578947,
+            "low": 0.6431126060602794,
+            "high": 0.73255056025551,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ],
+      "without_batteries": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4317673191177945,
+            "low": 0.41775452877830355,
+            "high": 0.4457801094572854,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6878315831578947,
+            "low": 0.6431126060602794,
+            "high": 0.73255056025551,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ],
+      "battery_effect": [
+        {
+          "metric": "transformers_overloaded_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ]
+    },
+    {
+      "penetration": 0.1,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.008333333333333333,
+            "low": -0.008710247017772533,
+            "high": 0.0253769136844392,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4624692758708593,
+            "low": 0.4448101867242905,
+            "high": 0.48012836501742806,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.7586396065029167,
+            "low": 0.7073897669219049,
+            "high": 0.8098894460839285,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.022866666666666664,
+            "low": -0.023900917816767824,
+            "high": 0.06963425115010115,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0001984126984126984,
+            "low": -0.00020738683375648887,
+            "high": 0.0006042122305818856,
+            "replications": 30
+          }
+        }
+      ],
+      "without_batteries": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4317673191177945,
+            "low": 0.41775452877830355,
+            "high": 0.4457801094572854,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6878315831578947,
+            "low": 0.6431126060602794,
+            "high": 0.73255056025551,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ],
+      "battery_effect": [
+        {
+          "metric": "transformers_overloaded_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.008333333333333333,
+            "low": -0.008710247017772533,
+            "high": 0.0253769136844392,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.030701956753064807,
+            "low": 0.020710170244402915,
+            "high": 0.0406937432617267,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.070808023345022,
+            "low": 0.02861769033885736,
+            "high": 0.11299835635118663,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.022866666666666664,
+            "low": -0.023900917816767824,
+            "high": 0.06963425115010115,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0001984126984126984,
+            "low": -0.00020738683375648887,
+            "high": 0.0006042122305818856,
+            "replications": 30
+          }
+        }
+      ]
+    },
+    {
+      "penetration": 0.25,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.15,
+            "low": 0.09198617879361484,
+            "high": 0.20801382120638515,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6049321857190786,
+            "low": 0.5851206678462395,
+            "high": 0.6247437035919177,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.0183882251027578,
+            "low": 0.9511531703085807,
+            "high": 1.085623279896935,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 3.075629907620839,
+            "low": 1.1819090449156917,
+            "high": 4.9693507703259865,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.008333333333333333,
+            "low": 0.0032414259386338374,
+            "high": 0.01342524072803283,
+            "replications": 30
+          }
+        }
+      ],
+      "without_batteries": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4317673191177945,
+            "low": 0.41775452877830355,
+            "high": 0.4457801094572854,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6878315831578947,
+            "low": 0.6431126060602794,
+            "high": 0.73255056025551,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ],
+      "battery_effect": [
+        {
+          "metric": "transformers_overloaded_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.15,
+            "low": 0.09198617879361484,
+            "high": 0.20801382120638515,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.1731648666012841,
+            "low": 0.15556674701187276,
+            "high": 0.19076298619069545,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.33055664194486306,
+            "low": 0.2602511179592971,
+            "high": 0.400862165930429,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 3.075629907620839,
+            "low": 1.1819090449156917,
+            "high": 4.9693507703259865,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.008333333333333333,
+            "low": 0.0032414259386338374,
+            "high": 0.01342524072803283,
+            "replications": 30
+          }
+        }
+      ]
+    },
+    {
+      "penetration": 0.5,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.525,
+            "low": 0.45003763769809924,
+            "high": 0.5999623623019008,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.9269953850384568,
+            "low": 0.9064595891148407,
+            "high": 0.9475311809620729,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.3819551403413683,
+            "low": 1.319168000023564,
+            "high": 1.4447422806591728,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 40.534351004507364,
+            "low": 28.697398433983345,
+            "high": 52.371303575031384,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.040178571428571425,
+            "low": 0.03371327671185071,
+            "high": 0.04664386614529214,
+            "replications": 30
+          }
+        }
+      ],
+      "without_batteries": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4317673191177945,
+            "low": 0.41775452877830355,
+            "high": 0.4457801094572854,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6878315831578947,
+            "low": 0.6431126060602794,
+            "high": 0.73255056025551,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ],
+      "battery_effect": [
+        {
+          "metric": "transformers_overloaded_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.525,
+            "low": 0.45003763769809924,
+            "high": 0.5999623623019008,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4952280659206624,
+            "low": 0.47376442604567875,
+            "high": 0.5166917057956459,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6941235571834735,
+            "low": 0.6106546069032557,
+            "high": 0.7775925074636914,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 40.534351004507364,
+            "low": 28.697398433983345,
+            "high": 52.371303575031384,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.040178571428571425,
+            "low": 0.03371327671185071,
+            "high": 0.04664386614529214,
+            "replications": 30
+          }
+        }
+      ]
+    },
+    {
+      "penetration": 0.75,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.9916666666666667,
+            "low": 0.9746230863155608,
+            "high": 1.0087102470177725,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.2997886340151132,
+            "low": 1.2801603455866692,
+            "high": 1.3194169224435572,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.7556041062504764,
+            "low": 1.7046085094193508,
+            "high": 1.806599703081602,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 210.78985221073754,
+            "low": 186.55445168479645,
+            "high": 235.02525273667862,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.030753968253968252,
+            "low": 0.027321380936141646,
+            "high": 0.034186555571794855,
+            "replications": 30
+          }
+        }
+      ],
+      "without_batteries": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4317673191177945,
+            "low": 0.41775452877830355,
+            "high": 0.4457801094572854,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6878315831578947,
+            "low": 0.6431126060602794,
+            "high": 0.73255056025551,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ],
+      "battery_effect": [
+        {
+          "metric": "transformers_overloaded_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.9916666666666667,
+            "low": 0.9746230863155608,
+            "high": 1.0087102470177725,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.8680213148973188,
+            "low": 0.8495448723890389,
+            "high": 0.8864977574055988,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.0677725230925816,
+            "low": 1.0108244298082696,
+            "high": 1.1247206163768937,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 210.78985221073754,
+            "low": 186.55445168479645,
+            "high": 235.02525273667862,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.030753968253968252,
+            "low": 0.027321380936141646,
+            "high": 0.034186555571794855,
+            "replications": 30
+          }
+        }
+      ]
+    },
+    {
+      "penetration": 1.0,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.0,
+            "low": 1.0,
+            "high": 1.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.663351415394554,
+            "low": 1.6441796791085785,
+            "high": 1.6825231516805292,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 2.163950506753409,
+            "low": 2.1202952041905174,
+            "high": 2.2076058093163002,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 548.7520110668962,
+            "low": 517.0250731817189,
+            "high": 580.4789489520736,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.02222222222222222,
+            "low": 0.018809543746943914,
+            "high": 0.025634900697500525,
+            "replications": 30
+          }
+        }
+      ],
+      "without_batteries": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.4317673191177945,
+            "low": 0.41775452877830355,
+            "high": 0.4457801094572854,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.6878315831578947,
+            "low": 0.6431126060602794,
+            "high": 0.73255056025551,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.0,
+            "low": 0.0,
+            "high": 0.0,
+            "replications": 30
+          }
+        }
+      ],
+      "battery_effect": [
+        {
+          "metric": "transformers_overloaded_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.0,
+            "low": 1.0,
+            "high": 1.0,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.2315840962767592,
+            "low": 1.2130513933260338,
+            "high": 1.2501167992274846,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "worst_peak_utilisation",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 1.476118923595514,
+            "low": 1.4370062649875537,
+            "high": 1.5152315822034745,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "total_overload_energy_kwh",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 548.7520110668962,
+            "low": 517.0250731817189,
+            "high": 580.4789489520736,
+            "replications": 30
+          }
+        },
+        {
+          "metric": "hidden_overload_share",
+          "left": "with_batteries",
+          "right": "without_batteries",
+          "interval": {
+            "level": 0.95,
+            "mean": 0.02222222222222222,
+            "low": 0.018809543746943914,
+            "high": 0.025634900697500525,
+            "replications": 30
+          }
+        }
+      ]
+    }
+  ],
+  "overload_crossing": {
+    "metric": "transformers_overloaded_share",
+    "per_replication": [
+      0.5,
+      0.25,
+      0.5,
+      0.25,
+      0.5,
+      0.25,
+      0.5,
+      0.5,
+      0.5,
+      0.25,
+      0.5,
+      0.5,
+      0.25,
+      0.25,
+      0.25,
+      0.5,
+      0.25,
+      0.5,
+      0.25,
+      0.25,
+      0.25,
+      0.5,
+      0.25,
+      0.25,
+      0.25,
+      0.1,
+      0.25,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "lowest": 0.1,
+    "highest": 0.5,
+    "interval_above_zero_from": 0.25
+  }
+}

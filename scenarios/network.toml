@@ -1,7 +1,7 @@
 # Full penetration on a network. Eight homes, four transformers, no clustering.
 # Paired with a without-batteries pass at each replication.
 
-n_homes = 8
+n_homes = 50
 penetration = 1.0
 mode = "diverse"
 region = "C"
