@@ -61,6 +61,8 @@ def generate_fleet(
     region: str = "C",
     mode: FleetMode = "diverse",
     distribution: BatteryDistribution | None = None,
+    transformer_map: dict[str, str] | None = None,
+    rho: float = 0.0,
 ) -> GeneratedFleet:
     """Draw ``n_homes`` homes for ``day``.
 
@@ -71,6 +73,11 @@ def generate_fleet(
     ownership from the ``penetration`` stream, and products from the
     ``battery`` stream. ``distribution`` replaces the catalogue in
     ``docs/assumptions.md`` when a scenario names its own.
+
+    When ``transformer_map`` is given and ``rho`` is above zero, ownership
+    clusters on transformers. Each home's score mixes its own draw with a
+    shared transformer draw, weighted by ``rho``. See
+    ``docs/assumptions.md``, Clustered ownership.
     """
     gsp = require_gsp_region(region)
     _require_penetration(penetration)
@@ -80,7 +87,12 @@ def generate_fleet(
     streams = RandomStreams(seed)
     households = pool.assign(n_homes, streams)
     draws = [float(value) for value in streams.generator("penetration").random(n_homes)]
-    owned = set(_owned_indices(draws, penetration))
+    home_ids = [f"home-{index + 1}" for index in range(n_homes)]
+    if transformer_map is not None and rho > 0:
+        scores = _clustered_scores(draws, home_ids, transformer_map, rho, streams)
+    else:
+        scores = draws
+    owned = set(_owned_indices(scores, penetration))
     battery_stream = streams.generator("battery")
     homes: list[Home] = []
     fallbacks: list[DemandFallback] = []
@@ -252,6 +264,30 @@ def _identical(fleet: Fleet, demands: list[list[float]]) -> Fleet:
         demand_kw=mean_demand,
     )
     return identical_homes(template, n_homes)
+
+
+def _clustered_scores(
+    individual_draws: list[float],
+    home_ids: list[str],
+    transformer_map: dict[str, str],
+    rho: float,
+    streams: RandomStreams,
+) -> list[float]:
+    """Blend each home's draw with a shared transformer draw.
+
+    ``score = rho * transformer_draw + (1 - rho) * individual_draw``.
+    Transformer ids are sorted so the draws are deterministic.
+    See ``docs/assumptions.md``, Clustered ownership.
+    """
+    gen = streams.generator("ownership-cluster")
+    transformer_ids = sorted(set(transformer_map.values()))
+    transformer_draws = {tid: float(gen.random()) for tid in transformer_ids}
+    scores: list[float] = []
+    for index, home_id in enumerate(home_ids):
+        tid = transformer_map[home_id]
+        score = rho * transformer_draws[tid] + (1 - rho) * individual_draws[index]
+        scores.append(score)
+    return scores
 
 
 def _require_penetration(penetration: float) -> None:

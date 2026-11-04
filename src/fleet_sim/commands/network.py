@@ -23,6 +23,7 @@ from fleet_sim.models.network import HomeProfile
 from fleet_sim.models.results import MetricEstimate, ScenarioRun
 from fleet_sim.models.scenario import RunMetadata, Scenario
 from fleet_sim.progress import RunProgress
+from fleet_sim.random_streams import RandomStreams
 from fleet_sim.scenario import git_commit
 from fleet_sim.stubs import active_stubs, begin_stub_run, require_no_stubs
 from fleet_sim.viz.network import plot_network_overload
@@ -66,6 +67,9 @@ def run_network_scenario(
     dates = _dates(scenario.start, scenario.end)
     if progress is not None:
         progress.task("Network", scenario.replications * len(dates))
+    home_ids = [f"home-{i + 1}" for i in range(scenario.n_homes)]
+    topology_streams = RandomStreams(scenario.seed)
+    spec = build_topology(home_ids, settings, topology_streams)
     samples: dict[str, list[float]] = {name: [] for name in _METRICS}
     frame_source: list[Frame] = []
     for index in range(scenario.replications):
@@ -79,9 +83,8 @@ def run_network_scenario(
             region=scenario.region,
             mode="diverse",
             distribution=scenario.battery,
-        )
-        spec = build_topology(
-            [home.home_id for home in generated.fleet.homes], settings
+            transformer_map=spec.home_transformer,
+            rho=settings.rho,
         )
         base = assign_transformers(generated.fleet, spec)
         day_reports = []

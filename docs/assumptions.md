@@ -28,6 +28,22 @@ Penetration `p` gives a battery to `floor(p * N + 0.5)` homes, halfway cases rou
 
 The draw does not look at the home's demand. A household is assigned from the `demand` stream and a product from the `battery` stream, and neither draw is conditioned on the other. Real ownership may well follow the house, the income, or the size of the load. That coupling is a possible refinement. It is not in this generator.
 
+## Clustered ownership
+
+Neighbours tend to adopt batteries together: word of mouth, the same installer, the same street. The scenario parameter ρ (`rho`, in [0, 1]) controls how much ownership clusters by transformer.
+
+Each home's ownership score mixes two components:
+
+    score = ρ × transformer_draw + (1 − ρ) × individual_draw
+
+The individual draw is the home's own uniform number from the `penetration` stream (the same draw as in the unclustered case). The transformer draw is one uniform number per transformer, drawn from the `ownership-cluster` stream and shared by every home on that transformer.
+
+Homes are ranked by score. At penetration p, the top `round(p × N)` homes own batteries. This preserves exact counts and nesting for any ρ.
+
+With ρ = 0, the score equals the individual draw, so ownership is identical to the unclustered case for the same seed. With ρ = 1, all homes on a transformer share the same score, so they all adopt or all do not: penetration varies sharply between transformers. Intermediate ρ gives partial clustering.
+
+ρ is a modelling choice, not a measured value. There is no UK dataset that calibrates how much battery adoption clusters at the transformer level. Setting ρ to zero recovers the uniform case; setting it higher explores how clustering amplifies transformer stress.
+
 ## Identical homes
 
 Identical mode builds the diverse fleet, then replaces it with N copies of the mean home. Demand in each slot is the mean of the diverse homes' demand. The battery is the mean of the batteries the diverse fleet actually owns. If none own one, the copies have none. If some own one, every copy gets that mean battery, so the homes are actually identical. A diversity comparison that should keep the same number of batteries wants a penetration of 1, where every diverse home already has one.
@@ -35,6 +51,34 @@ Identical mode builds the diverse fleet, then replaces it with N copies of the m
 ## Demand
 
 Demand is a day from the Low Carbon London pool, documented in `docs/household-demand.md`. Energy in the file is kWh per half hour. The home stores average kW, which is that energy divided by 0.5 hours. The trial predates widespread heat pumps and electric vehicles.
+
+## Transformer sizing
+
+A distribution transformer serves a group of homes. Its rating is chosen so that the peak demand of all connected homes, as seen at the transformer, stays within that rating. The design uses after-diversity maximum demand.
+
+**ADMD** (after-diversity maximum demand) is the expected peak demand per connected home once the diversity of usage patterns is taken into account. A single home may peak at 10 kW, but twenty homes on the same transformer are unlikely to all peak at once. ADMD is the average peak each home contributes to the transformer's total peak. UK distribution network operators use ADMD tables that depend on the number of homes and the dwelling type; see ACE Report 49 and the ENA Engineering Recommendation P2/8.
+
+The design load of a transformer is the number of homes it serves multiplied by the ADMD, multiplied by a headroom factor:
+
+    design_kw = n_homes × admd_kw × headroom
+
+That load is then converted to kVA by dividing by the power factor and rounded up to the nearest standard transformer rating:
+
+    required_kva = design_kw / power_factor
+    selected_kva = smallest standard rating ≥ required_kva
+    limit_kw = selected_kva × power_factor
+
+The default ADMD is a scenario parameter (`admd_kw`), not a table. The default headroom is 1.0 and the default power factor is 0.95, which is typical for UK domestic loads. The standard ratings default to 25, 50, 100 kVA. All of these are modelling choices and can be overridden in the scenario file.
+
+When the design load exceeds the largest available rating the largest rating is used. This is the point of the study: batteries can push a transformer above the rating it was sized for.
+
+## Home assignment
+
+Each home is assigned to a uniformly random transformer. The number of transformers is set in the scenario. The random assignment means some transformers serve more homes than others, and their limits vary accordingly. The assignment uses the `"topology"` random stream so it is reproducible from the seed.
+
+## Transformer locations
+
+Each transformer is given a synthetic location: a random point within a bounding box set in the scenario (defaults to a rectangle covering London). These are for the map in a later milestone and have no effect on the simulation.
 
 ## Transformer limits
 
