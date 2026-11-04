@@ -125,12 +125,9 @@ class NetworkSpec(BaseModel):
 class NetworkSettings(BaseModel):
     """The ``[network]`` section of a scenario.
 
-    The topology stub reads ``n_transformers`` and ``limit_kw``. The other
-    fields are the sizing, location, and clustering parameters later issues
-    use. They are accepted and ignored until those stubs are replaced.
+    See ``docs/assumptions.md``, Transformer sizing and Clustered ownership.
     """
 
-    # TODO: document what each parameter here is for, or where to find definitions.
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     n_transformers: int

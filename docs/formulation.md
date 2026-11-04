@@ -372,6 +372,10 @@ Over one or more days, the replication summary aggregates the per-transformer pe
 
 **Hidden-overload share** is the mean of the per-day hidden-overload shares.
 
+### Overload crossing
+
+At a sequence of penetration levels $`p_1 < p_2 < \ldots < p_K`$, the **overload crossing** for one replication is the smallest $`p_k`$ where the share of transformers overloaded is above zero. It is absent when no level overloads. Over $`R`$ replications, the crossing range is the minimum and maximum of the per-replication crossings, and the **interval-based crossing** is the first $`p_k`$ whose 95% t-interval for the overloaded share lies entirely above zero.
+
 ## Later extensions
 
 These are not part of the model above.

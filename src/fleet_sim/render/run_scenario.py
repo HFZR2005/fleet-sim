@@ -20,6 +20,11 @@ _LABELS = {
     "coincidence_factor": "Coincidence factor",
     "total_savings_pence": "Total saving (pence)",
     "savings_per_home_pence": "Saving per home (pence)",
+    "transformers_overloaded_share": "Transformers overloaded",
+    "mean_peak_utilisation": "Mean peak utilisation",
+    "worst_peak_utilisation": "Worst peak utilisation",
+    "total_overload_energy_kwh": "Total overload energy (kWh)",
+    "hidden_overload_share": "Hidden overload share",
 }
 
 
@@ -43,6 +48,8 @@ def run_scenario_view(result: ScenarioRun) -> Group:
         blocks.append(_difference_table("With batteries minus without", result.battery))
     if len(result.levels) > 1:
         blocks.append(_penetration_table(result))
+    if len(result.network_levels) > 1:
+        blocks.append(_network_penetration_table(result))
     if result.stubs:
         listed = Text("Active stubs", style="bold")
         listed.append("\n" + "\n".join(result.stubs))
@@ -105,6 +112,31 @@ def _penetration_table(result: ScenarioRun) -> Table:
         )
         table.add_row(f"{100 * level.penetration:.0f}%", *_bounds(interval))
     return table
+
+
+def _network_penetration_table(result: ScenarioRun) -> Table:
+    table = Table(title="Network overload by penetration")
+    table.add_column("Penetration")
+    table.add_column("Overloaded share", justify="right")
+    table.add_column("Mean utilisation", justify="right")
+    table.add_column("Overload energy (kWh)", justify="right")
+    table.add_column("Hidden share", justify="right")
+    for level in result.network_levels:
+        by_name = {m.metric: m.interval for m in level.metrics}
+        table.add_row(
+            f"{100 * level.penetration:.0f}%",
+            _ci(by_name.get("transformers_overloaded_share")),
+            _ci(by_name.get("mean_peak_utilisation")),
+            _ci(by_name.get("total_overload_energy_kwh")),
+            _ci(by_name.get("hidden_overload_share")),
+        )
+    return table
+
+
+def _ci(interval: ConfidenceInterval | None) -> str:
+    if interval is None:
+        return ""
+    return f"{interval.mean:.2f} ({interval.low:.2f}–{interval.high:.2f})"
 
 
 def _bounds(interval: ConfidenceInterval) -> tuple[str, str, str]:
