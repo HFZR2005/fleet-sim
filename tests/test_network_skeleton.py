@@ -26,7 +26,7 @@ def test_the_smoke_scenario_runs_and_lists_its_stubs(
     text = capsys.readouterr().out
     assert text.startswith("STUB ") or "STUB " in text
     assert "build_topology" not in text
-    assert "day_overload" in text
+    assert "day_overload" not in text
     assert "_evaluate_transformers" not in text
     assert "plot_network_overload" in text
     frames = json.loads((output / "frames.json").read_text(encoding="utf-8"))

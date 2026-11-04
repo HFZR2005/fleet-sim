@@ -46,7 +46,7 @@ def build_topology(
     n = settings.n_transformers
     gen = streams.generator("topology")
     assignments = gen.integers(0, n, size=len(home_ids))
-    home_transformer: dict[str, str] = {} # home_id -> transformer_id
+    home_transformer: dict[str, str] = {}  # home_id -> transformer_id
     counts: dict[int, int] = {i: 0 for i in range(n)}
     for home_id, transformer_index in zip(home_ids, assignments, strict=True):
         idx = int(transformer_index)

@@ -322,6 +322,56 @@ A node may have a limit, a fixed kW cap, the same in every slot. The limit says 
 
 In this milestone the limit is measured, not enforced. A home still optimises against the tariff, with every price adjustment left at zero. Milestone 5 enforces the limit through those price adjustments.
 
+## Overload metrics
+
+These summarise how far the network is stressed. They are computed after every home has solved and the network flow is known.
+
+### Per transformer per day
+
+Let $`f_t^n`$ be the flow at transformer $`n`$ in slot $`t`$, and $`\bar{f}^n`$ its limit.
+
+**Peak utilisation** is the ratio of peak flow to the limit:
+
+$$
+u^n = \frac{\max_t f_t^n}{\bar{f}^n}.
+$$
+
+A utilisation above 1 means the transformer is overloaded in at least one slot. A utilisation below 1 means the flow never exceeds the limit.
+
+**Overload energy** is the energy above the limit over the day, in kWh:
+
+$$
+E^n = \sum_{t=0}^{T-1} \max(0,\; f_t^n - \bar{f}^n) \, \Delta.
+$$
+
+**Overloaded slots** is the count of slots where $`f_t^n > \bar{f}^n`$.
+
+### Hidden overloads
+
+A hidden overload is a slot where the fleet total flow is within the sum of all transformer limits, but at least one transformer is over its own limit. The hidden-overload share is the fraction of slots where this happens:
+
+$$
+h = \frac{1}{T} \sum_{t=0}^{T-1} \mathbf{1}\!\left[\sum_n f_t^n \leq \sum_n \bar{f}^n \;\text{and}\; \exists\, n : f_t^n > \bar{f}^n\right].
+$$
+
+This is the number that shows why fleet totals alone mislead: the aggregate can look fine while individual transformers are overloaded.
+
+### Per replication
+
+Over one or more days, the replication summary aggregates the per-transformer per-day metrics.
+
+**Share of transformers overloaded** is the fraction of transformers that have at least one overloaded slot across all days in the replication.
+
+**Mean peak utilisation** is the mean of $`u^n`$ across all transformer-day pairs.
+
+**Worst peak utilisation** is the maximum $`u^n`$ across all transformer-day pairs.
+
+**Total overload energy** is the sum of $`E^n`$ across all transformer-day pairs, in kWh.
+
+**Overload hour** is the hour of day (0–23) in which overloaded slots occur most. Each slot $`t`$ maps to hour $`\lfloor t / 2 \rfloor`$. The hour with the highest count of overloaded transformer-slots across all days wins. Ties go to the earliest hour. It is absent when no slot is overloaded.
+
+**Hidden-overload share** is the mean of the per-day hidden-overload shares.
+
 ## Later extensions
 
 These are not part of the model above.

@@ -130,7 +130,7 @@ class NetworkSettings(BaseModel):
     use. They are accepted and ignored until those stubs are replaced.
     """
 
-    #TODO: document what each parameter here is for, or where to find definitions.
+    # TODO: document what each parameter here is for, or where to find definitions.
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     n_transformers: int
@@ -278,7 +278,9 @@ class DayOverload(BaseModel):
 
     The hidden-overload share is the fraction of slots where the fleet total
     is inside the sum of the limits but at least one transformer is over its
-    own.
+    own. ``slot_overload_counts`` has one entry per slot: the number of
+    transformers overloaded in that slot. It is used to find the hour of day
+    overloads occur most.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -286,6 +288,7 @@ class DayOverload(BaseModel):
     day: date
     transformers: list[TransformerOverload]
     hidden_overload_share: float
+    slot_overload_counts: list[int]
 
 
 class ReplicationOverload(BaseModel):
