@@ -1,7 +1,7 @@
 """A scenario that names transformers: fleet, tree, solve, overload, figure.
 
-Topology, the overload numbers, and the figure are stubs. The summary across
-replications is the same t-interval as any other metric.
+The figure is a stub. The summary across replications is the same t-interval
+as any other metric.
 """
 
 import json
