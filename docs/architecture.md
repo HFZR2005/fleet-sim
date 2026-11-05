@@ -9,6 +9,16 @@ covers:
   - viz/network.py
   - models/network.py
   - models/results.py
+  - prices/config.py
+  - prices/dataset.py
+  - prices/curves.py
+  - prices/targets.py
+  - prices/evaluation.py
+  - prices/response.py
+  - prices/figures.py
+  - data/wholesale.py
+  - data/residual_load.py
+  - data/fuel_cost.py
 ---
 
 # Architecture
@@ -36,3 +46,32 @@ A run draws a fleet, solves each home on its own, and reads the network off the 
 | `ReplicationOverload` | Share of transformers overloaded, mean and worst utilisation, total overload energy, the hour overloads occur most, hidden-overload share |
 
 A scenario with no `[network]` section does not enter this path. It still solves against one unconstrained root.
+
+## Price curves
+
+A separate pipeline calibrates price curves: the relationship between wholesale electricity price and residual load (demand minus renewables). The curve tells the fleet simulator how scheduling decisions that shift aggregate demand change the price. It runs from `scripts/fit_price_curves.py`, not through the `fleet-sim` CLI.
+
+### Stages
+
+1. **Load.** Three data loaders in `fleet_sim/data/` provide wholesale prices (inverted from Agile), residual load, and marginal fuel cost. `load_and_align` in `prices/dataset.py` joins them on timestamp into `PriceObservation` records.
+2. **Split.** `split_dataset` partitions observations by year into training and test sets. The `compare` mode never reads the final-test year.
+3. **Transform.** A `Target` extracts the dependent variable from each observation. Raw targets use the wholesale price directly; the fuel-adjusted target subtracts fuel cost. A target also says whether to fit per year or pool all years.
+4. **Fit.** A `PriceCurve` fits `(residual_load, y)` data and returns a `FittedCurve` with `predict` and `slope` methods. No family knows about targets.
+5. **Evaluate.** `evaluate` scores the fitted curve on held-out data, producing a `FitResult` with RMSE and R² metrics.
+6. **Compare / Finalise.** `compare` runs all (family, target) models and writes a comparison table and figures. `finalise` refits the chosen model on training data, evaluates on the final-test year, and writes the parameters file — but only after `require_no_stubs()` confirms no stub ran.
+
+A model is a (curve family, target) pair. The family does not know about targets, and no target knows about families.
+
+### Types
+
+| Type | Role |
+| --- | --- |
+| `PriceObservation` | One half-hour: timestamp, wholesale price (£/MWh), residual load (GW), fuel cost (£/MWh), year |
+| `PriceDataset` | A collection of aligned observations |
+| `SplitSpec` | Which years go into training, testing, and final testing |
+| `FittedCurve` | Protocol: `predict(r_gw)` and `slope(r_gw)` |
+| `PriceCurve` | Protocol: `fit(r_gw, y) -> FittedCurve` |
+| `Target` | Protocol: `to_target(obs) -> y`, `to_price(y, obs) -> price`, `per_year` flag |
+| `FitResult` | Metrics for one model on one split |
+| `EvaluationReport` | Comparison of all fitted models |
+| `CalibrationConfig` | Validates `calibration/price_curves.toml` |

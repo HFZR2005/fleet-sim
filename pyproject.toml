@@ -24,6 +24,7 @@ build-backend = "hatchling.build"
 dev = [
     "mkdocs-material>=9.6.0",
     "mypy>=2.4.0",
+    "nbstripout>=0.8.1",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
     "scipy-stubs>=1.18.1.1",
@@ -35,3 +36,7 @@ testpaths = ["tests"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
+exclude = ["notebooks/"]
+
+[tool.ruff]
+exclude = ["notebooks/"]

@@ -17,5 +17,11 @@ build/
 # Generated figures
 figures/
 
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated results
+results/
+
 # MkDocs
 site/

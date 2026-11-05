@@ -1,0 +1,34 @@
+[data]
+start = 2019-01-01
+end = 2025-12-31
+cache_dir = ".cache/prices"
+agile_regions = ["C"]
+
+[fuel_cost]
+heat_rate = 7.0
+gas_carbon_intensity = 0.184
+include_carbon_price_support = true
+
+[dataset]
+drop_capped_slots = true
+min_coverage = 0.9
+
+[splits]
+training_years = [2019, 2020, 2021, 2022, 2023, 2024]
+selection = "leave_one_year_out"
+final_test_year = 2025
+
+[models]
+families = ["constant"]
+targets = ["raw_pooled", "raw_per_year", "fuel_adjusted"]
+
+[evaluation]
+weight_by_fleet_schedule = "identical"
+
+[chosen]
+main = ""
+robustness = ""
+
+[output]
+results_dir = "results/price-curves"
+parameters_file = "calibration/parameters.json"
