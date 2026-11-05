@@ -31,6 +31,41 @@ The codebase may contain stubs: functions that return placeholder data while the
 - When you replace a stub, remove its decorator in the same PR and add tests that would fail against the stub.
 - Outputs produced while any stub is active must say so (`STUB` prefixes, figure watermarks), and `--release` runs fail. Don't remove or weaken these markers.
 
+## Codebase map
+
+```
+src/fleet_sim/
+  models/          Pydantic boundary types (BatterySpec, Schedule, PriceSeries, Scenario, …).
+                   All use ConfigDict(extra="forbid", frozen=True). Units in field names.
+  data/            Data loaders. PriceSource protocol (source.py), DemandProfile protocol
+                   (demand.py), Agile prices (agile.py), household demand (households.py).
+  commands/        One module per CLI command. Thin orchestrators that load config,
+                   call domain logic, and return a result for the render layer.
+  fleet/           Fleet generation (generate.py), home solving (solve.py), network
+                   aggregation (network.py), topology (topology.py), overload metrics.
+  optimise/        Home-level LP/MILP solver (home.py) and rule-based fallback (rule.py).
+  coordination/    Fleet coordination strategies (currently empty, milestone 5).
+  experiments/     Sweep and report logic for multi-replication experiments.
+  render/          Rich console output for each command.
+  viz/             Matplotlib figures. apply_style() and style_axes() from style.py,
+                   save_figure(fig, stem) from save.py writes SVG + PNG.
+  stubs.py         @stub("reason") decorator. Tracks which stubs ran per invocation.
+  cli.py           Typer app. Wires commands, catches domain errors, exposes --release.
+  scenario.py      Loads and validates scenario TOML files.
+```
+
+## Canonical examples
+
+When exploring how the codebase does something, start with these files rather than reading broadly:
+
+- **Pydantic model**: `models/home.py` — validators, unit-named fields, frozen config
+- **Protocol**: `data/source.py` (`PriceSource`) — structural subtyping, no base class
+- **TOML loading**: `scenario.py` — `tomllib.loads` → `model_validate`, error wrapping
+- **CLI command**: `commands/run_home.py` → wired in `cli.py`
+- **Test with fixtures**: `tests/test_agile.py` — fixture files, opener injection, no network
+- **Stub tracking**: `commands/network.py` — `begin_stub_run`, `active_stubs`, `require_no_stubs`
+- **Figures**: `viz/network.py` — `apply_style`, `style_axes`, `save_figure`
+
 ## Code conventions
 
 - Python 3.12, `src/` layout, managed with `uv`.
