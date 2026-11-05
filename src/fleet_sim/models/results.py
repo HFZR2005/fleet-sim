@@ -197,6 +197,41 @@ class PenetrationSweep(BaseModel):
     crossing: PeakCrossing
 
 
+class NetworkLevelResult(BaseModel):
+    """Overload metrics at one penetration level of a network sweep.
+
+    ``metrics`` is with batteries. ``without_batteries`` is penetration 0
+    on the same topology and seed. ``battery_effect`` is the paired
+    difference: with minus without.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    penetration: float
+    metrics: list[MetricEstimate]
+    without_batteries: list[MetricEstimate]
+    battery_effect: list[PairedDifference]
+
+
+class OverloadCrossing(BaseModel):
+    """The penetration at which overloads first appear.
+
+    ``metric`` names the criterion (``transformers_overloaded_share``).
+    ``per_replication`` is that penetration for each replication, or
+    ``None`` when that replication never crosses. ``interval_above_zero_from``
+    is the first grid level whose 95% interval for that metric lies wholly
+    above zero.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metric: str
+    per_replication: list[float | None]
+    lowest: float | None
+    highest: float | None
+    interval_above_zero_from: float | None
+
+
 class ScenarioRun(BaseModel):
     """What ``run-scenario`` printed and where it wrote."""
 
@@ -221,4 +256,6 @@ class ScenarioRun(BaseModel):
     diversity_figure: Path | None = None
     penetration_figure: Path | None = None
     overload_figure: Path | None = None
+    network_levels: list[NetworkLevelResult] = Field(default_factory=list)
+    overload_crossing: OverloadCrossing | None = None
     stubs: list[str] = Field(default_factory=list)
