@@ -1,3 +1,9 @@
+---
+covers:
+  - fleet/network.py
+  - models/network.py
+---
+
 # Network as a price
 
 One unconstrained root node through milestone 3. Every home sits under it, and it has no flow limit.

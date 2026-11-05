@@ -1,3 +1,9 @@
+---
+covers:
+  - data/households.py
+  - models/demand.py
+---
+
 # Household demand
 
 Homes in a fleet take their half-hourly demand from the UK Power Networks Low Carbon London trial, published by the London Datastore as "SmartMeter Energy Consumption Data in London Households". The trial ran from November 2011 to February 2014 and metered 5,567 households. The pool keeps both tariff groups. About 1,100 households were on a dynamic time-of-use tariff during 2013, and the rest were on a flat tariff. The file's `stdorToU` column records which, and it is not used to drop households.

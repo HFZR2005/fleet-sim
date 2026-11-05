@@ -1,3 +1,12 @@
+---
+covers:
+  - models/scenario.py
+  - models/network.py
+  - fleet/topology.py
+  - fleet/generate.py
+  - data/agile.py
+---
+
 # Assumptions
 
 Choices a reader will want to question. Each one is a modelling decision, and the source of the numbers is named with it.

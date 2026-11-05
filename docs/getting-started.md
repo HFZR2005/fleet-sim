@@ -1,3 +1,8 @@
+---
+covers:
+  - cli.py
+---
+
 # Getting started
 
 ## Setup

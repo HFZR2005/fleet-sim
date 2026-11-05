@@ -1,3 +1,15 @@
+---
+covers:
+  - commands/network.py
+  - commands/scenario.py
+  - fleet/generate.py
+  - fleet/topology.py
+  - fleet/solve.py
+  - fleet/network.py
+  - fleet/overload.py
+  - experiments/report.py
+---
+
 # Pipeline overview
 
 The simulator runs in stages. Each stage takes typed data from the previous one and produces typed output for the next. This page shows the data flow visually and links to the detailed reference for each stage.

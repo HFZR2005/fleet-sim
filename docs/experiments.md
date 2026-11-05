@@ -1,3 +1,11 @@
+---
+covers:
+  - experiments/report.py
+  - random_streams.py
+  - commands/network.py
+  - commands/scenario.py
+---
+
 # Experiments
 
 A reported number is a mean over replications, with a 95% t-interval. The replication is the independent sample. A day inside a replication is not.

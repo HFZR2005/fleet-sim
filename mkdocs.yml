@@ -64,5 +64,6 @@ nav:
     - Output format: frames.md
   - Results:
     - "Milestone 3 — Diversity": results/milestone-3.md
+    - "Milestone 4 — Overloads": results/milestone-4.md
   - Decisions:
     - "ADR-0001: Network as a price": decisions/0001-network-as-a-price.md

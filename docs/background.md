@@ -1,3 +1,9 @@
+---
+covers:
+  - data/agile.py
+  - models/network.py
+---
+
 # UK energy context
 
 This page introduces the UK energy concepts the simulator builds on. Each section is a brief explanation with links to authoritative sources. See [Assumptions](assumptions.md) for the specific modelling choices fleet-sim makes.

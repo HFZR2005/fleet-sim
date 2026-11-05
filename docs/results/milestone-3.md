@@ -1,3 +1,11 @@
+---
+covers:
+  - commands/scenario.py
+  - fleet/generate.py
+  - experiments/report.py
+  - viz/results.py
+---
+
 # Diversity and penetration
 
 Eight homes, region C, 5–11 January 2026. Master seed 1, 30 replications. Each number below is the mean of those 30 replications, and the range in brackets is the 95% t-interval. A replication draws one fleet and the reported metric is the mean of that fleet over the seven days.
