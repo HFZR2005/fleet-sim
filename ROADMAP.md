@@ -16,11 +16,11 @@ How large is the new peak, and how wide is the spread, when homes are no longer 
 
 ## Milestone 4
 
-Where do transformer limits bind, and how does the network reach a home? The topology and the limits live in `Network`. A home still only sees the network as a price adjustment.
+Where do transformer limits bind, and how does the network reach a home? Done. `fleet-sim run-scenario scenarios/network-sweep.toml` sweeps penetration from 0% to 100% on a four-transformer tree, measures overloads with 95% intervals, and compares clustered (ρ = 0.8) to unclustered (ρ = 0) ownership. Overloads first appear at 25% penetration and every transformer is overloaded at full penetration. Clustering brings overloads forward and concentrates the energy. Results are in `docs/results/milestone-4.md`.
 
 ## Milestone 5
 
-How much bill saving is given up to cut the peak, and who gives it up? Coordination trades a home's saving against the fleet peak, and the result says which homes give the saving up.
+How much of the battery savings can coordination keep while removing the overloads? A coordinator adjusts each home's charging window so that no transformer exceeds its limit. The question is the trade-off: how many pence per home does the fleet give up, and which homes bear the cost?
 
 ## Milestone 6
 

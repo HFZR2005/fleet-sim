@@ -22,3 +22,25 @@ jobs:
       - run: uv run mypy --strict src
       - run: uv run ruff check
       - run: uv run ruff format --check
+      - name: Seed price cache from fixture
+        run: |
+          uv run python -c "
+          from fleet_sim.data.agile import load_agile_import_prices
+          from pathlib import Path
+          from datetime import date
+          cache = Path('/tmp/fleet-sim-cache')
+          cache.mkdir(parents=True, exist_ok=True)
+          fixture = Path('tests/fixtures/agile_import_c_2024-06-15.json')
+          load_agile_import_prices(
+              date(2024, 6, 15), 'C',
+              cache_dir=cache,
+              opener=lambda _url: fixture.read_bytes(),
+          )
+          "
+      - run: >
+          uv run fleet-sim run-scenario scenarios/smoke-network.toml
+          --households tests/fixtures/lcl_household_days.csv
+          --cache-dir /tmp/fleet-sim-cache
+          --output /tmp/fleet-sim-smoke
+          --max-households 2
+          --release

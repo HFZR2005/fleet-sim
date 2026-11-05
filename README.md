@@ -47,3 +47,13 @@ The command reads the scenario, draws each replication from the Low Carbon Londo
 Eight homes, region C, 5–11 January 2026, thirty replications. Demand is the first 100 households in that file. A diverse fleet peaks 3.57 kW below identical copies of the same mean home (95% interval −4.34 to −2.80 kW). One battery in the eight is enough for the fleet peak to rise above the no-battery peak, and at full penetration the peak is 26.19 kW higher. The curve is the six penetrations in `scenarios/penetration-sweep.toml`.
 
 ![Peak demand with and without batteries against penetration, eight homes, region C, 5–11 January 2026](docs/penetration.svg)
+
+### Transformer overloads
+
+```bash
+uv run fleet-sim run-scenario scenarios/network-sweep.toml
+```
+
+Fifty homes on four transformers, region C, 5–11 January 2026, thirty replications. Each transformer is sized from ADMD (2 kW per home, power factor 0.95, standard ratings). Without batteries, no transformer is overloaded (mean utilisation 0.43). Batteries charging during the same cheap half-hours push transformers past their limits: at 25% penetration, 15% of transformers are overloaded; at 50%, more than half; at 100%, every transformer is overloaded with a mean peak utilisation of 1.66. When battery ownership clusters on transformers (ρ = 0.8), overloads appear earlier and hit harder — at 25% penetration, overload energy rises from 3 kWh to 70 kWh. The full results are in [docs/results/milestone-4.md](docs/results/milestone-4.md).
+
+![Share of transformers overloaded against penetration, fifty homes, region C, 5–11 January 2026](docs/overload.svg)
