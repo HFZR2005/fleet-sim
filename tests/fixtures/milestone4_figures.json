@@ -1,0 +1,115 @@
+{
+  "network_levels": [
+    {
+      "penetration": 0.0,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {"level": 0.95, "mean": 0.0, "low": 0.0, "high": 0.0, "replications": 4}
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {"level": 0.95, "mean": 0.4, "low": 0.35, "high": 0.45, "replications": 4}
+        }
+      ],
+      "without_batteries": [],
+      "battery_effect": []
+    },
+    {
+      "penetration": 0.5,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {"level": 0.95, "mean": 0.5, "low": 0.3, "high": 0.7, "replications": 4}
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {"level": 0.95, "mean": 0.9, "low": 0.8, "high": 1.0, "replications": 4}
+        }
+      ],
+      "without_batteries": [],
+      "battery_effect": []
+    },
+    {
+      "penetration": 1.0,
+      "metrics": [
+        {
+          "metric": "transformers_overloaded_share",
+          "interval": {"level": 0.95, "mean": 1.0, "low": 1.0, "high": 1.0, "replications": 4}
+        },
+        {
+          "metric": "mean_peak_utilisation",
+          "interval": {"level": 0.95, "mean": 1.6, "low": 1.5, "high": 1.7, "replications": 4}
+        }
+      ],
+      "without_batteries": [],
+      "battery_effect": []
+    }
+  ],
+  "frames": {
+    "schema_version": 1,
+    "frames": [
+      {
+        "slot_start": "2026-01-08T00:00:00",
+        "price_p_per_kwh": 5.0,
+        "homes": [
+          {"home_id": "h1", "transformer_id": "T1", "soc": 0.5, "mode": "charging", "import_kw": 4.0, "demand_kw": 1.0},
+          {"home_id": "h2", "transformer_id": "T1", "soc": 0.5, "mode": "charging", "import_kw": 3.0, "demand_kw": 1.0},
+          {"home_id": "h3", "transformer_id": "T2", "soc": 0.5, "mode": "charging", "import_kw": 2.0, "demand_kw": 1.5},
+          {"home_id": "h4", "transformer_id": "T2", "soc": 0.5, "mode": "idle", "import_kw": 1.0, "demand_kw": 1.0}
+        ],
+        "nodes": [
+          {"node_id": "root", "flow_kw": 10.0, "limit_kw": null, "overload_kw": 0.0},
+          {"node_id": "T1", "flow_kw": 7.0, "limit_kw": 5.0, "overload_kw": 2.0},
+          {"node_id": "T2", "flow_kw": 3.0, "limit_kw": 5.0, "overload_kw": 0.0}
+        ]
+      },
+      {
+        "slot_start": "2026-01-08T00:30:00",
+        "price_p_per_kwh": 4.0,
+        "homes": [
+          {"home_id": "h1", "transformer_id": "T1", "soc": 0.7, "mode": "charging", "import_kw": 3.0, "demand_kw": 1.0},
+          {"home_id": "h2", "transformer_id": "T1", "soc": 0.7, "mode": "charging", "import_kw": 3.0, "demand_kw": 1.0},
+          {"home_id": "h3", "transformer_id": "T2", "soc": 0.7, "mode": "idle", "import_kw": 1.5, "demand_kw": 1.5},
+          {"home_id": "h4", "transformer_id": "T2", "soc": 0.5, "mode": "idle", "import_kw": 1.0, "demand_kw": 1.0}
+        ],
+        "nodes": [
+          {"node_id": "root", "flow_kw": 8.5, "limit_kw": null, "overload_kw": 0.0},
+          {"node_id": "T1", "flow_kw": 6.0, "limit_kw": 5.0, "overload_kw": 1.0},
+          {"node_id": "T2", "flow_kw": 2.5, "limit_kw": 5.0, "overload_kw": 0.0}
+        ]
+      },
+      {
+        "slot_start": "2026-01-08T01:00:00",
+        "price_p_per_kwh": 3.0,
+        "homes": [
+          {"home_id": "h1", "transformer_id": "T1", "soc": 0.9, "mode": "idle", "import_kw": 1.0, "demand_kw": 1.0},
+          {"home_id": "h2", "transformer_id": "T1", "soc": 0.9, "mode": "idle", "import_kw": 1.0, "demand_kw": 1.0},
+          {"home_id": "h3", "transformer_id": "T2", "soc": 0.9, "mode": "idle", "import_kw": 1.5, "demand_kw": 1.5},
+          {"home_id": "h4", "transformer_id": "T2", "soc": 0.5, "mode": "idle", "import_kw": 1.0, "demand_kw": 1.0}
+        ],
+        "nodes": [
+          {"node_id": "root", "flow_kw": 4.5, "limit_kw": null, "overload_kw": 0.0},
+          {"node_id": "T1", "flow_kw": 2.0, "limit_kw": 5.0, "overload_kw": 0.0},
+          {"node_id": "T2", "flow_kw": 2.5, "limit_kw": 5.0, "overload_kw": 0.0}
+        ]
+      },
+      {
+        "slot_start": "2026-01-08T01:30:00",
+        "price_p_per_kwh": 3.5,
+        "homes": [
+          {"home_id": "h1", "transformer_id": "T1", "soc": 0.9, "mode": "idle", "import_kw": 1.0, "demand_kw": 1.0},
+          {"home_id": "h2", "transformer_id": "T1", "soc": 0.9, "mode": "idle", "import_kw": 1.0, "demand_kw": 1.0},
+          {"home_id": "h3", "transformer_id": "T2", "soc": 0.9, "mode": "idle", "import_kw": 1.5, "demand_kw": 1.5},
+          {"home_id": "h4", "transformer_id": "T2", "soc": 0.5, "mode": "idle", "import_kw": 1.5, "demand_kw": 1.5}
+        ],
+        "nodes": [
+          {"node_id": "root", "flow_kw": 5.0, "limit_kw": null, "overload_kw": 0.0},
+          {"node_id": "T1", "flow_kw": 2.0, "limit_kw": 5.0, "overload_kw": 0.0},
+          {"node_id": "T2", "flow_kw": 3.0, "limit_kw": 5.0, "overload_kw": 0.0}
+        ]
+      }
+    ],
+    "metadata": null
+  }
+}

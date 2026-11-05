@@ -32,7 +32,14 @@ from fleet_sim.progress import RunProgress
 from fleet_sim.random_streams import RandomStreams
 from fleet_sim.scenario import git_commit
 from fleet_sim.stubs import active_stubs, begin_stub_run, require_no_stubs
-from fleet_sim.viz.network import plot_network_overload
+from fleet_sim.viz.network import (
+    OverloadSeries,
+    plot_overload_curve,
+    plot_transformer_day,
+    plot_utilisation_distribution,
+    read_transformer_day,
+    read_utilisation_distribution,
+)
 from fleet_sim.viz.save import save_figure
 
 _PACKAGE = "fleet-sim"
@@ -141,7 +148,6 @@ def run_network_scenario(
     network_levels = _build_levels(penetrations, samples)
     crossing = _overload_crossing(penetrations, samples)
     highest_metrics = network_levels[-1].metrics if network_levels else []
-    figure = plot_network_overload(highest_metrics)
     if release:
         require_no_stubs()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -154,7 +160,6 @@ def run_network_scenario(
     frames_path = output_dir / "frames.json"
     metadata_path = output_dir / "metadata.json"
     metrics_path = output_dir / "metrics.json"
-    overload_figure = output_dir / "overload"
     write_frames(frames_path, frame_source, metadata=metadata)
     _write_json(metadata_path, metadata.model_dump(mode="json"))
     _write_json(
@@ -170,7 +175,26 @@ def run_network_scenario(
             ),
         },
     )
-    save_figure(figure, overload_figure)
+
+    overload_curve_path = output_dir / "overload_curve"
+    curve_series = OverloadSeries(
+        label=f"ρ = {settings.rho}",
+        penetrations=penetrations,
+        bands=[
+            _metric_band(level.metrics, "transformers_overloaded_share")
+            for level in network_levels
+        ],
+    )
+    save_figure(plot_overload_curve([curve_series]), overload_curve_path)
+
+    transformer_day_path = output_dir / "transformer_day"
+    transformer_day = read_transformer_day(frames_path)
+    save_figure(plot_transformer_day(transformer_day), transformer_day_path)
+
+    utilisation_dist_path = output_dir / "utilisation_dist"
+    util_data = read_utilisation_distribution(frames_path)
+    save_figure(plot_utilisation_distribution(util_data), utilisation_dist_path)
+
     return ScenarioRun(
         n_homes=scenario.n_homes,
         region=scenario.region,
@@ -191,7 +215,7 @@ def run_network_scenario(
         metadata_path=metadata_path,
         metrics_path=metrics_path,
         stubs=active_stubs(),
-        overload_figure=overload_figure,
+        overload_figure=overload_curve_path,
         network_levels=network_levels,
         overload_crossing=crossing,
     )
@@ -331,6 +355,16 @@ def _overload_crossing(
         highest=max(crossed) if crossed else None,
         interval_above_zero_from=above,
     )
+
+
+def _metric_band(
+    metrics: list[MetricEstimate], name: str
+) -> tuple[float, float, float]:
+    """Extract ``(mean, low, high)`` for ``name`` from a metrics list."""
+    for item in metrics:
+        if item.metric == name:
+            return (item.interval.mean, item.interval.low, item.interval.high)
+    raise ValueError(f"no metric named {name}")
 
 
 def _dates(start: date, end: date) -> list[date]:

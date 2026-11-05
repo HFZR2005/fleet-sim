@@ -1,4 +1,4 @@
-"""The network scenario runs, lists its stubs, and refuses --release."""
+"""The network scenario runs with real figures and accepts --release."""
 
 import json
 from pathlib import Path
@@ -14,7 +14,7 @@ _HOUSEHOLDS = _ROOT / "tests" / "fixtures" / "lcl_household_days.csv"
 _SCENARIO = _ROOT / "scenarios" / "smoke-network.toml"
 
 
-def test_the_smoke_scenario_runs_and_lists_its_stubs(
+def test_the_smoke_scenario_runs_and_produces_figures(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     output = tmp_path / "out"
@@ -24,11 +24,7 @@ def test_the_smoke_scenario_runs_and_lists_its_stubs(
 
     assert code == 0
     text = capsys.readouterr().out
-    assert text.startswith("STUB ") or "STUB " in text
-    assert "build_topology" not in text
-    assert "day_overload" not in text
-    assert "_evaluate_transformers" not in text
-    assert "plot_network_overload" in text
+    assert "STUB" not in text
     frames = json.loads((output / "frames.json").read_text(encoding="utf-8"))
     nodes = frames["frames"][0]["nodes"]
     by_id = {node["node_id"]: node for node in nodes}
@@ -48,11 +44,14 @@ def test_the_smoke_scenario_runs_and_lists_its_stubs(
             )
     homes = frames["frames"][0]["homes"]
     assert all(home["transformer_id"] is not None for home in homes)
-    svg = (output / "overload.svg").read_text(encoding="utf-8")
-    assert "STUB" in svg
+    svg = (output / "overload_curve.svg").read_text(encoding="utf-8")
+    assert "STUB" not in svg
+    assert "Share of transformers overloaded" in svg
+    assert (output / "transformer_day.svg").exists()
+    assert (output / "utilisation_dist.svg").exists()
 
 
-def test_release_fails_while_stubs_are_active(
+def test_release_succeeds_with_no_stubs(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     code = main(
@@ -60,11 +59,8 @@ def test_release_fails_while_stubs_are_active(
         opener=lambda _url: _PRICES.read_bytes(),
     )
 
-    assert code == 1
-    error = capsys.readouterr().err
-    assert "STUB" in error
-    assert "build_topology" not in error
-    assert not (tmp_path / "out" / "frames.json").exists()
+    assert code == 0
+    assert (tmp_path / "out" / "frames.json").exists()
 
 
 def test_a_cycle_is_not_a_tree() -> None:
