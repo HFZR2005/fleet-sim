@@ -1,3 +1,12 @@
+---
+covers:
+  - commands/network.py
+  - fleet/topology.py
+  - fleet/overload.py
+  - fleet/network.py
+  - viz/network.py
+---
+
 # Transformer overloads and penetration
 
 Fifty homes, region C, 5–11 January 2026. Master seed 1, 30 replications. Four transformers, ADMD 2 kW, headroom 1.0, power factor 0.95, standard ratings [25, 50, 100] kVA. Each number below is the mean of those 30 replications, and the range in brackets is the 95% t-interval. A replication draws one fleet and the reported metric is the mean of that fleet over the seven days.

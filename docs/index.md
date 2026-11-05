@@ -1,3 +1,7 @@
+---
+covers: []
+---
+
 # fleet-sim
 
 A simulator of UK home batteries scheduled against half-hourly electricity prices ([Octopus Agile](https://octopus.energy/smart/agile/)), scaling from one home to a fleet, to study how fleets of individually optimal batteries create new demand peaks and how coordination strategies trade savings against peak reduction.
@@ -25,6 +29,7 @@ Each home solves its own cheapest-charging problem. When many homes do this agai
 **Results**
 
 - [Milestone 3 — Diversity](results/milestone-3.md) — diverse vs identical fleets, and peak demand against penetration.
+- [Milestone 4 — Overloads](results/milestone-4.md) — transformer overloads against penetration, with and without clustering.
 
 **Decisions**
 

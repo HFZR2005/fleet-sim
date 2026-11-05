@@ -1,3 +1,9 @@
+---
+covers:
+  - models/frames.py
+  - fleet/frames.py
+---
+
 # Frame file
 
 A fleet run writes one JSON file. Each element of `frames` is one half-hour slot. `schema_version` is `1`.

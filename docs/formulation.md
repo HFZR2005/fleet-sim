@@ -1,3 +1,12 @@
+---
+covers:
+  - optimise/home.py
+  - models/home.py
+  - models/scenario.py
+  - fleet/network.py
+  - fleet/overload.py
+---
+
 # One-home problem
 
 This note specifies the optimisation problem for a single home battery over one day. The battery chooses when to charge and discharge so as to minimise the cost of electricity imported from the grid. Demand and the import price are known parameters. Later optimiser code implements the equations in this file.
