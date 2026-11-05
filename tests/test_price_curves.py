@@ -91,8 +91,32 @@ def _test_config(tmp_path: Path) -> CalibrationConfig:
     )
 
 
-def test_compare_completes_and_lists_stubs(tmp_path: Path) -> None:
+def _synthetic_residual_load(
+    *,
+    start_year: int,
+    end_year: int,
+    **_kwargs: object,
+) -> list[tuple[datetime, float]]:
+    """Synthetic residual load for pipeline tests (no network)."""
+    rows: list[tuple[datetime, float]] = []
+    for year in range(start_year, end_year + 1):
+        base = datetime(year, 6, 15, tzinfo=UTC)
+        for day_offset in range(2):
+            day_start = base + timedelta(days=day_offset)
+            for slot in range(48):
+                stamp = day_start + timedelta(minutes=30 * slot)
+                load_gw = 20.0 + 20.0 * slot / 47
+                rows.append((stamp, load_gw))
+    return rows
+
+
+def test_compare_completes_and_lists_stubs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The compare pipeline runs end to end and reports active stubs."""
+    monkeypatch.setattr(
+        "fleet_sim.prices.dataset.load_residual_load", _synthetic_residual_load
+    )
     begin_stub_run()
     config = _test_config(tmp_path)
     dataset = load_and_align(config)
@@ -150,8 +174,13 @@ def test_finalise_refuses_when_chosen_empty(tmp_path: Path) -> None:
             )
 
 
-def test_finalise_refuses_params_while_stubs_active(tmp_path: Path) -> None:
+def test_finalise_refuses_params_while_stubs_active(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Finalise refuses to write the parameters file when stubs ran."""
+    monkeypatch.setattr(
+        "fleet_sim.prices.dataset.load_residual_load", _synthetic_residual_load
+    )
     begin_stub_run()
     config = _test_config(tmp_path)
     dataset = load_and_align(config)
