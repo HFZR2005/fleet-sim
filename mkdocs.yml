@@ -1,0 +1,68 @@
+site_name: fleet-sim
+site_description: Simulator of UK home batteries scheduled against half-hourly electricity prices.
+repo_url: https://github.com/HFZR2005/fleet-sim
+repo_name: HFZR2005/fleet-sim
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - tables
+
+extra_javascript:
+  - https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/HFZR2005/fleet-sim
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Background:
+    - UK energy context: background.md
+    - Pipeline overview: pipeline.md
+  - Reference:
+    - Formulation: formulation.md
+    - Architecture: architecture.md
+    - Assumptions: assumptions.md
+    - Experiments: experiments.md
+    - Household demand: household-demand.md
+    - Output format: frames.md
+  - Results:
+    - "Milestone 3 — Diversity": results/milestone-3.md
+  - Decisions:
+    - "ADR-0001: Network as a price": decisions/0001-network-as-a-price.md
