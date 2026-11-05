@@ -9,6 +9,7 @@ which into testing.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -115,7 +116,14 @@ def load_and_align(config: CalibrationConfig) -> PriceDataset:
     start_year = config.data.start.year
     end_year = config.data.end.year
 
-    prices = dict(load_wholesale_prices(start_year=start_year, end_year=end_year))
+    prices = dict(
+        load_wholesale_prices(
+            start_year=start_year,
+            end_year=end_year,
+            regions=config.data.agile_regions,
+            cache_dir=Path(config.data.cache_dir),
+        )
+    )
     loads = dict(load_residual_load(start_year=start_year, end_year=end_year))
     costs = dict(
         compute_fuel_cost(

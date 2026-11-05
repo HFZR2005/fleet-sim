@@ -16,6 +16,8 @@ covers:
   - prices/evaluation.py
   - prices/response.py
   - prices/figures.py
+  - data/agile_formula.py
+  - data/agile_history.py
   - data/wholesale.py
   - data/residual_load.py
   - data/fuel_cost.py
