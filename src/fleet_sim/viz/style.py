@@ -5,6 +5,7 @@ Plots take these values from here. They do not choose their own.
 
 import matplotlib as mpl
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 INK = "#1f2933"
 PAPER = "#ffffff"
@@ -32,6 +33,7 @@ DIVERSITY_FIGURE_INCHES = (7.2, 3.8)
 NETWORK_FIGURE_INCHES = (7.2, 3.6)
 TRANSFORMER_DAY_FIGURE_INCHES = (7.2, 4.2)
 UTILISATION_FIGURE_INCHES = (7.2, 3.6)
+PRICE_CURVE_FIGURE_INCHES = (7.2, 4.8)
 
 
 def apply_style() -> None:
@@ -64,3 +66,20 @@ def style_axes(ax: Axes) -> None:
     ax.spines["bottom"].set_color(INK)
     ax.tick_params(colors=INK, width=0.8)
     ax.grid(True, color=GRIDLINE, linewidth=GRID_WIDTH)
+
+
+def watermark_stub(fig: Figure) -> None:
+    """Draw a diagonal STUB watermark across the figure."""
+    fig.text(
+        0.5,
+        0.5,
+        "STUB",
+        fontsize=72,
+        color="#cccccc",
+        alpha=0.3,
+        ha="center",
+        va="center",
+        rotation=45,
+        transform=fig.transFigure,
+        zorder=999,
+    )
