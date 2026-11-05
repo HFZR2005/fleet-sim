@@ -124,7 +124,13 @@ def load_and_align(config: CalibrationConfig) -> PriceDataset:
             cache_dir=Path(config.data.cache_dir),
         )
     )
-    loads = dict(load_residual_load(start_year=start_year, end_year=end_year))
+    loads = dict(
+        load_residual_load(
+            start_year=start_year,
+            end_year=end_year,
+            cache_dir=Path(config.data.cache_dir),
+        )
+    )
     costs = dict(
         compute_fuel_cost(
             start_year=start_year,
