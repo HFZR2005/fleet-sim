@@ -110,12 +110,30 @@ def _synthetic_residual_load(
     return rows
 
 
+def _synthetic_fuel_cost(
+    *,
+    start_year: int,
+    end_year: int,
+    **_kwargs: object,
+) -> list[tuple[datetime, float]]:
+    """Constant synthetic fuel cost for pipeline tests (no network)."""
+    rows: list[tuple[datetime, float]] = []
+    for year in range(start_year, end_year + 1):
+        base = datetime(year, 6, 15, tzinfo=UTC)
+        for slot in range(2 * 48):
+            rows.append((base + timedelta(minutes=30 * slot), 30.0))
+    return rows
+
+
 def test_compare_completes_and_lists_stubs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The compare pipeline runs end to end and reports active stubs."""
     monkeypatch.setattr(
         "fleet_sim.prices.dataset.load_residual_load", _synthetic_residual_load
+    )
+    monkeypatch.setattr(
+        "fleet_sim.prices.dataset.compute_fuel_cost", _synthetic_fuel_cost
     )
     begin_stub_run()
     config = _test_config(tmp_path)
@@ -180,6 +198,9 @@ def test_finalise_refuses_params_while_stubs_active(
     """Finalise refuses to write the parameters file when stubs ran."""
     monkeypatch.setattr(
         "fleet_sim.prices.dataset.load_residual_load", _synthetic_residual_load
+    )
+    monkeypatch.setattr(
+        "fleet_sim.prices.dataset.compute_fuel_cost", _synthetic_fuel_cost
     )
     begin_stub_run()
     config = _test_config(tmp_path)

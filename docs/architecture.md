@@ -20,6 +20,8 @@ covers:
   - data/agile_history.py
   - data/wholesale.py
   - data/residual_load.py
+  - data/gas_price.py
+  - data/carbon_price.py
   - data/fuel_cost.py
 ---
 

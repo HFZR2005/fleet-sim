@@ -9,6 +9,7 @@ See ``docs/data/agile.md`` for the formula and its derivation.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -60,18 +61,12 @@ def invert_rates(
     period_from: datetime,
     period_to: datetime,
     cache_dir: Path | None = None,
-    opener: object | None = None,
+    opener: Callable[[str], bytes] | None = None,
 ) -> list[InvertedRate]:
     """Invert Agile rates to wholesale for the full date range.
 
     Returns all slots including capped ones (with ``capped=True``).
     """
-    from collections.abc import Callable as CallableType
-
-    typed_opener: CallableType[[str], bytes] | None = (
-        opener if callable(opener) else None
-    )
-
     spans = version_date_ranges(period_from.date(), period_to.date())
 
     results: list[InvertedRate] = []
@@ -89,7 +84,7 @@ def invert_rates(
             period_from=max(span_from, period_from),
             period_to=min(span_to, period_to),
             cache_dir=cache_dir,
-            opener=typed_opener,
+            opener=opener,
         )
 
         for rate in rates:

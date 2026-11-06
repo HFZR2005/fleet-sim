@@ -31,6 +31,7 @@ class DemandProfile(Protocol):
 
     def demand(self, day: date) -> DemandSeries:
         """Return 48 slot energies in kWh for ``day``."""
+        ...
 
 
 class FixedDemandProfile:

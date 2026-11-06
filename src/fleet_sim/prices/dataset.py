@@ -138,6 +138,7 @@ def load_and_align(config: CalibrationConfig) -> PriceDataset:
             heat_rate=config.fuel_cost.heat_rate,
             gas_carbon_intensity=config.fuel_cost.gas_carbon_intensity,
             include_carbon_price_support=config.fuel_cost.include_carbon_price_support,
+            cache_dir=Path(config.data.cache_dir),
         )
     )
 

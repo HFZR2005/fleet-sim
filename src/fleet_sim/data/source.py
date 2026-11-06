@@ -14,6 +14,7 @@ class PriceSource(Protocol):
 
     def load(self, day: date, region: str) -> PriceSeries:
         """Return the half-hourly import prices for ``region`` on ``day``."""
+        ...
 
 
 class FixturePriceSource:

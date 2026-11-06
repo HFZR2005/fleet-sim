@@ -5,7 +5,7 @@ cache_dir = ".cache/prices"
 agile_regions = ["C"]
 
 [fuel_cost]
-heat_rate = 7.0
+heat_rate = 2.0
 gas_carbon_intensity = 0.184
 include_carbon_price_support = true
 
