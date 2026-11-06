@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -313,7 +314,9 @@ class TestAgileHistory:
 
 
 class TestLoadWholesalePrices:
-    def _fixture_opener(self, wholesale_p: float, region: str) -> object:
+    def _fixture_opener(
+        self, wholesale_p: float, region: str
+    ) -> Callable[[str], bytes]:
         """Build an opener that returns rates for a known wholesale price."""
         params = REGION_PARAMS[region]
         rates: list[dict[str, object]] = []
