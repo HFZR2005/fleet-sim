@@ -56,9 +56,12 @@ relative weight of gas and carbon in k from day to day.
 
 | Parameter | Value | Basis |
 |-----------|-------|-------|
-| `heat_rate` | 2.0 MWh gas / MWh elec | Equivalent to 50 % thermal efficiency on a gross calorific value basis, typical of the GB CCGT fleet. DESNZ, *Digest of UK Energy Statistics* (DUKES), Chapter 5: plant loads, demand and efficiency. |
-| `gas_carbon_intensity` | 0.184 tCO₂ / MWh gas | Natural gas CO₂ emission factor on a gross CV basis (0.184 kgCO₂/kWh). DESNZ, *Greenhouse gas reporting: conversion factors*. Later editions give about 0.183; the difference is well below the uncertainty in HR. |
+| `heat_rate` | 2.0 MWh gas / MWh elec | 50 % thermal efficiency, rounded. DUKES 2026 Table 5.10.C (*Thermal efficiency, gross calorific value basis*) gives CCGT stations 48.78 % (2019), 48.44 % (2020), 49.00 % (2021), 49.11 % (2022), 48.95 % (2023), 48.56 % (2024), 47.99 % (2025), i.e. HR ≈ 2.05. The rounding is absorbed by h (below). |
+| `gas_carbon_intensity` | 0.184 tCO₂ / MWh gas | Natural gas (100 % mineral blend), kWh gross CV, kg CO₂ per unit: 0.18409 (2019), 0.18395 (2023), 0.18457 (2025). DESNZ, *Greenhouse gas reporting: conversion factors*, condensed set, Fuels sheet. The mineral factor is used because the carbon price is paid on fossil CO₂; the network-gas row (which includes biomethane) is about 0.1826 in 2023–25. |
 | `include_carbon_price_support` | true | GB generators pay CPS on top of the ETS price. |
+
+DUKES: <https://www.gov.uk/government/statistics/electricity-chapter-5-digest-of-united-kingdom-energy-statistics-dukes>.
+Conversion factors: <https://www.gov.uk/government/collections/government-conversion-factors-for-company-reporting>.
 
 ## Units and conversions
 
@@ -136,14 +139,21 @@ financial year (1 April to 31 March). Embedded in `carbon_price.py`:
 |----------------|-------------------|
 | 2013–14 | 4.94 |
 | 2014–15 | 9.55 |
-| 2015–16 onwards | 18.08 |
+| 2015–16 | 18.08 |
+| 2016–17 to 2027–28 | 18.00 |
 
-The rate has been frozen at £18.08 since April 2015. The table runs
-to 2027–28. Years after the latest HMRC announcement assume the
-freeze continues and should be checked when extending the date range.
-A month outside the table raises an error rather than guessing.
+HMRC publishes CPS as per-fuel rates, not £/tCO₂. From 1 April 2016
+it lists one rate running to 31 March 2028, set equivalent to the
+£18/tCO₂ cap. For gas that is £0.00331/kWh = £3.31/MWh gas, and
+3.31 ÷ 0.184 = £17.99/tCO₂. A month after March 2028 raises an error:
+no rate is published beyond it.
 
-- Source: HMRC, *Climate Change Levy: rates and allowances*,
+The 2013–14 to 2015–16 rates were removed from the HMRC page in
+November 2022 and are not re-verified here. They come before the
+calibration period (2019 onwards), so they are never used.
+
+- Source: HMRC, *Climate Change Levy: rates and allowances* (updated
+  27 November 2025),
   <https://www.gov.uk/government/publications/rates-and-allowances-climate-change-levy>
 - Licence: Open Government Licence v3.0
 

@@ -198,16 +198,27 @@ class TestEuEtsCsv:
 
 class TestCarbonPriceSupport:
     def test_cps_rate_fy_2019(self) -> None:
-        """April 2019 → FY starting 2019 → £18.08."""
-        assert cps_rate_for(date(2019, 4, 1)) == pytest.approx(18.08)
+        """April 2019 → FY starting 2019 → £18."""
+        assert cps_rate_for(date(2019, 4, 1)) == pytest.approx(18.00)
 
     def test_cps_rate_jan_2020(self) -> None:
-        """January 2020 → FY starting 2019 (Jan is before April) → £18.08."""
-        assert cps_rate_for(date(2020, 1, 1)) == pytest.approx(18.08)
+        """January 2020 → FY starting 2019 (Jan is before April) → £18."""
+        assert cps_rate_for(date(2020, 1, 1)) == pytest.approx(18.00)
 
     def test_cps_rate_fy_2015(self) -> None:
-        """FY 2015-16 → £18.08 (frozen from here onwards)."""
+        """FY 2015-16 → £18.08, the last rate before the £18 cap."""
         assert cps_rate_for(date(2015, 6, 1)) == pytest.approx(18.08)
+
+    def test_cps_rate_fy_2016_first_capped_year(self) -> None:
+        """March 2016 is still FY 2015-16; April 2016 starts the £18 cap."""
+        assert cps_rate_for(date(2016, 3, 1)) == pytest.approx(18.08)
+        assert cps_rate_for(date(2016, 4, 1)) == pytest.approx(18.00)
+
+    def test_cps_rate_fy_2027_last_published(self) -> None:
+        """HMRC's published rate runs to 31 March 2028; nothing after."""
+        assert cps_rate_for(date(2028, 3, 1)) == pytest.approx(18.00)
+        with pytest.raises(ValueError, match="no CPS rate"):
+            cps_rate_for(date(2028, 4, 1))
 
     def test_cps_rate_fy_2014(self) -> None:
         """FY 2014-15 → £9.55."""
@@ -242,7 +253,7 @@ class TestCarbonPriceLoader:
 
         jan_21 = next(r for r in rows if r.month_start == date(2021, 1, 1))
         assert jan_21.ets_gbp_per_tco2 == pytest.approx(28.50)
-        assert jan_21.cps_gbp_per_tco2 == pytest.approx(18.08)
+        assert jan_21.cps_gbp_per_tco2 == pytest.approx(18.00)
 
     def test_cps_excluded_when_flag_false(self, tmp_path: Path) -> None:
         shutil.copy(_FIXTURES / "eu_ets_monthly.csv", tmp_path / "eu_ets_monthly.csv")
@@ -269,25 +280,22 @@ class TestFuelCostFormula:
     def test_hand_worked_example(self, tmp_path: Path) -> None:
         """Hand computation from issue #67.
 
-        Gas price G = £25/MWh, ETS+CPS = £58/tCO₂,
+        Gas price G = £25/MWh, ETS = £40/tCO₂, CPS = £18/tCO₂ (FY 2023-24),
         HR = 2.0 (MWh gas / MWh elec), c_gas = 0.184 (tCO₂ / MWh gas).
 
+        C_t = 40 + 18 = 58
         k_t = HR × (G_t + c_gas × C_t)
              = 2.0 × (25 + 0.184 × 58)
              = 2.0 × (25 + 10.672)
              = 2.0 × 35.672
              = £71.344/MWh
-
-        The issue's worked example uses ETS=£40 and CPS=£18.  Our
-        embedded CPS table has £18.08, so we set ETS=£58 with CPS
-        disabled to reproduce the exact inputs.
         """
         _write_gas_fixture(tmp_path, date(2023, 6, 15), sap_p_kwh=2.5)
 
         _write_carbon_fixtures(
             tmp_path,
             month=date(2023, 6, 1),
-            ets_price=58.0,
+            ets_price=40.0,
         )
 
         gas_xlsx = (tmp_path / "ons_gas_sap.xlsx").read_bytes()
@@ -306,7 +314,7 @@ class TestFuelCostFormula:
             end_year=2023,
             heat_rate=2.0,
             gas_carbon_intensity=0.184,
-            include_carbon_price_support=False,
+            include_carbon_price_support=True,
             cache_dir=tmp_path,
             gas_opener=gas_opener,
             carbon_opener=carbon_opener,
@@ -315,35 +323,6 @@ class TestFuelCostFormula:
         assert len(results) == 48
         for _, k_t in results:
             assert k_t == pytest.approx(71.344, abs=0.001)
-
-    def test_with_real_cps(self, tmp_path: Path) -> None:
-        """With include_carbon_price_support, CPS = £18.08 (FY 2023).
-
-        G=£25/MWh, ETS=£40/tCO₂, CPS=£18.08/tCO₂, HR=2.0, c_gas=0.184.
-        C_t = 40 + 18.08 = 58.08
-        k_t = 2.0 × (25 + 0.184 × 58.08) = 2.0 × 35.68672 = £71.37344/MWh
-        """
-        _write_gas_fixture(tmp_path, date(2023, 6, 15), sap_p_kwh=2.5)
-        _write_carbon_fixtures(
-            tmp_path,
-            month=date(2023, 6, 1),
-            ets_price=40.0,
-        )
-        gas_xlsx = (tmp_path / "ons_gas_sap.xlsx").read_bytes()
-        ccm_html = (tmp_path / "uk_ets_monthly.html").read_bytes()
-
-        results = compute_fuel_cost(
-            start_year=2023,
-            end_year=2023,
-            heat_rate=2.0,
-            gas_carbon_intensity=0.184,
-            include_carbon_price_support=True,
-            cache_dir=tmp_path,
-            gas_opener=lambda u: _landing_html() if "datasets" in u else gas_xlsx,
-            carbon_opener=lambda u: ccm_html,
-        )
-        _, k_t = results[0]
-        assert k_t == pytest.approx(71.37344, abs=0.001)
 
     def test_cps_excluded(self, tmp_path: Path) -> None:
         """Without CPS, C_t = ETS only.

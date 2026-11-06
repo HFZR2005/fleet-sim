@@ -48,27 +48,25 @@ _MONTH_ABBR: dict[str, int] = {
 }
 
 # Carbon Price Support rate in £/tCO₂, by financial year start.
-# Source: HMRC, Climate Change Levy rates and allowances.
-# https://www.gov.uk/government/publications/rates-and-allowances-climate-change-levy
-#
-# The CPS rate is the £/tCO₂ levy on fossil fuels used in electricity
-# generation.  It has been frozen at £18.08/tCO₂ since April 2015.
+# From April 2016 HMRC sets per-fuel rates equivalent to £18/tCO₂, published
+# as one rate running to 31 March 2028 (gas: £0.00331/kWh, i.e. £3.31/MWh,
+# ÷ 0.184 tCO₂/MWh ≈ £18/t).  See docs/data/fuel-cost.md.
 _CPS_RATES_GBP_PER_TCO2: dict[int, float] = {
     2013: 4.94,
     2014: 9.55,
     2015: 18.08,
-    2016: 18.08,
-    2017: 18.08,
-    2018: 18.08,
-    2019: 18.08,
-    2020: 18.08,
-    2021: 18.08,
-    2022: 18.08,
-    2023: 18.08,
-    2024: 18.08,
-    2025: 18.08,
-    2026: 18.08,
-    2027: 18.08,
+    2016: 18.00,
+    2017: 18.00,
+    2018: 18.00,
+    2019: 18.00,
+    2020: 18.00,
+    2021: 18.00,
+    2022: 18.00,
+    2023: 18.00,
+    2024: 18.00,
+    2025: 18.00,
+    2026: 18.00,
+    2027: 18.00,
 }
 
 
