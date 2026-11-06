@@ -76,20 +76,6 @@ def test_one_replication_is_rejected(
     assert "at least 2" in capsys.readouterr().err
 
 
-def test_a_clock_change_is_rejected_without_a_request(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    scenario = _write_scenario(tmp_path, "0.0", replications=2, day="2024-10-27")
-
-    def opener(url: str) -> bytes:
-        raise AssertionError(url)
-
-    code = main(_argv(scenario, tmp_path / "out", tmp_path / "cache"), opener=opener)
-
-    assert code == 1
-    assert "clock-change" in capsys.readouterr().err
-
-
 def _argv(scenario: Path, output: Path, cache: Path) -> list[str]:
     return [
         "run-scenario",

@@ -6,14 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from fleet_sim.data import AgilePriceSource
-from fleet_sim.data.source import PriceSource
 from fleet_sim.fleet import Fleet, Home, identical_homes, run_fleet_days
 from fleet_sim.models import BatterySpec, ClockChangeDayError, PriceSeries
 from fleet_sim.models.prices import london_day_bounds_utc
 
 FIXTURE = Path(__file__).parent / "fixtures" / "fleet_prices_three_days.json"
-AGILE = Path(__file__).parent / "fixtures" / "agile_import_c_2024-06-15.json"
 
 
 class _Days:
@@ -115,44 +112,3 @@ def test_a_clock_change_day_is_rejected_before_a_request() -> None:
             region="C",
             price_source=_Source(),
         )
-
-
-def test_a_second_run_reuses_cached_prices(tmp_path: Path) -> None:
-    calls: list[str] = []
-
-    def opener(url: str) -> bytes:
-        calls.append(url)
-        return AGILE.read_bytes()
-
-    source: PriceSource = AgilePriceSource(cache_dir=tmp_path, opener=opener)
-    template = Home(
-        home_id="home",
-        region="C",
-        battery=BatterySpec(
-            capacity_kwh=2.0,
-            max_charge_kw=8.0,
-            max_discharge_kw=2.0,
-            eta_charge=0.5,
-            eta_discharge=0.5,
-            soc_initial=0.25,
-        ),
-        demand_kw=[1.0] * 48,
-    )
-    fleet = identical_homes(template, 1)
-    first = run_fleet_days(
-        fleet,
-        start=date(2024, 6, 15),
-        end=date(2024, 6, 15),
-        region="C",
-        price_source=source,
-    )
-    second = run_fleet_days(
-        fleet,
-        start=date(2024, 6, 15),
-        end=date(2024, 6, 15),
-        region="C",
-        price_source=source,
-    )
-
-    assert len(calls) == 1
-    assert second.days[0].metrics == first.days[0].metrics

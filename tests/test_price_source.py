@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from fleet_sim.data import AgilePriceSource, FixturePriceSource, PriceSource
-from fleet_sim.data.agile import AGILE_IMPORT_PRODUCT
 from fleet_sim.models import PriceSeries
 from fleet_sim.models.prices import london_day_bounds_utc
 
@@ -53,6 +52,3 @@ def test_agile_source_uses_the_cache(tmp_path: Path) -> None:
     assert len(calls) == 1
     assert first.price_p_per_kwh[0] == -8.25
     assert first.timestamps_utc[0] == datetime(2024, 6, 14, 23, 0, tzinfo=UTC)
-    cached = list(tmp_path.glob("*.json"))
-    assert len(cached) == 1
-    assert cached[0].name == f"{AGILE_IMPORT_PRODUCT}_C_2024-06-15.json"

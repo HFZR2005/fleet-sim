@@ -78,10 +78,26 @@ When exploring how the codebase does something, start with these files rather th
 
 ## Tests
 
-- Every behaviour change comes with tests in `tests/`.
-- Tests never touch the network. Use the fixture files in `tests/fixtures/`.
-- Optimiser tests include at least one case small enough to solve by hand, with the expected answer worked out in a comment.
+Tests exist to catch a wrong answer, not to restate the code. Prefer fewer, stronger tests.
+
+What to test:
+
+- Every behaviour change comes with tests in `tests/`: one per acceptance criterion, through the public function. Don't test `_private` helpers directly.
+- Every equation gets one case small enough to solve by hand, with the working in a comment. One worked case is one test with several asserts; don't split it into a test per field.
+- Several inputs to the same rule (rate tables, boundaries, invalid values) go in one `@pytest.mark.parametrize` table, not one test each.
+- A replaced stub needs at least one test that fails against the stub, not more because of it.
+
+What not to test:
+
+- What Pydantic, mypy or the library already guarantee: field types, `extra="forbid"`, that a valid model constructs, `isinstance` on return values. Do test custom validators and their messages.
+- A shared mechanism (cache read/write, opener injection, clock-change rejection) more than once. Test it where it's implemented, plus one end-to-end CLI test.
+- The same behaviour at several layers. Test the lowest layer that owns it.
+
+Mechanics:
+
+- Tests never touch the network. Use the fixture files in `tests/fixtures/`; put repeated setup in a fixture or `conftest.py` instead of copying it.
 - Random behaviour takes an explicit seed.
+- If a module's tests are longer than the module itself, say why in your summary.
 
 ## Do not
 
