@@ -19,7 +19,13 @@ uv run ruff check
 uv run ruff format --check
 ```
 
-Tests live in `tests/` and do not use the network. Saved responses are in `tests/fixtures/`. A change in behaviour comes with a test. An optimiser test includes one case small enough to solve by hand, with the expected answer in a comment.
+Tests live in `tests/` and do not use the network. Saved responses are in `tests/fixtures/`. A change in behaviour comes with a test. Tests exist to catch a wrong answer, so prefer fewer, stronger ones:
+
+- Test each acceptance criterion through the public function, not private helpers.
+- Every equation gets one case small enough to solve by hand, with the working in a comment. Keep a worked case in one test with several asserts.
+- Put several inputs to the same rule in one `@pytest.mark.parametrize` table.
+- Don't test what Pydantic, mypy or a library already guarantee, and don't test a shared mechanism (caching, opener injection, clock-change rejection) in every module that uses it.
+- Put repeated setup in a fixture or `conftest.py`.
 
 ## Workflow
 
