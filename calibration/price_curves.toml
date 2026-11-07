@@ -1,5 +1,5 @@
 [data]
-start = 2019-01-01
+start = 2021-05-01
 end = 2025-12-31
 cache_dir = ".cache/prices"
 agile_regions = ["C"]
@@ -10,7 +10,7 @@ gas_carbon_intensity = 0.184
 include_carbon_price_support = true
 
 [splits]
-training_years = [2019, 2020, 2021, 2022, 2023, 2024]
+training_years = [2021, 2022, 2023, 2024]
 final_test_year = 2025
 
 [models]
