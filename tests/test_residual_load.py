@@ -96,6 +96,22 @@ def test_neso_demand_parses_and_caches(tmp_path: Path) -> None:
     assert calls == []
 
 
+@pytest.mark.parametrize(
+    "date_cell",
+    # As written in the real yearly files.
+    ["01-JAN-2024", "01-Jan-24", '"2024-01-01"', "01/01/2024"],
+)
+def test_neso_demand_reads_each_date_format(tmp_path: Path, date_cell: str) -> None:
+    (tmp_path / "neso_demand_2024.csv").write_text(
+        "SETTLEMENT_DATE,SETTLEMENT_PERIOD,ND,PUMP_STORAGE_PUMPING\n"
+        f"{date_cell},1,21783,0\n"
+    )
+
+    [row] = load_neso_demand(year=2024, cache_dir=tmp_path)
+
+    assert row.settlement_date == date(2024, 1, 1)
+
+
 def test_elexon_wind_parses_and_caches_per_month(tmp_path: Path) -> None:
     calls: list[str] = []
     opener = _elexon_opener(calls)

@@ -170,7 +170,11 @@ def _normalise(name: str) -> str:
 
 
 def _parse_date(value: str) -> date:
-    """Parse NESO date strings: DD/MM/YYYY, YYYY-MM-DD, or DD-Mon-YY."""
+    """Parse NESO date strings.
+
+    The yearly files differ: DD-MON-YYYY (2019–2022, 2024), DD-Mon-YY
+    (2023), YYYY-MM-DD (2025).  DD/MM/YYYY is also accepted.
+    """
     from datetime import datetime as _dt
 
     value = value.strip()
@@ -179,7 +183,8 @@ def _parse_date(value: str) -> date:
         return date(int(parts[2]), int(parts[1]), int(parts[0]))
     parts = value.split("-")
     if len(parts) == 3 and parts[1].isalpha():
-        return _dt.strptime(value, "%d-%b-%y").date()
+        year_format = "%Y" if len(parts[2]) == 4 else "%y"
+        return _dt.strptime(value, f"%d-%b-{year_format}").date()
     return date.fromisoformat(value)
 
 
