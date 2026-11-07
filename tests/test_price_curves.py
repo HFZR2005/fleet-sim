@@ -1,60 +1,36 @@
-"""End-to-end tests for the price-curve pipeline skeleton."""
+"""Tests for the price-curve pipeline: dataset, splits, targets and stubs."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 
-from fleet_sim.prices.config import CalibrationConfig
+from fleet_sim.data.agile_formula import InvertedRate
+from fleet_sim.data.settlement import settlement_periods_utc
+from fleet_sim.prices.config import CalibrationConfig, SplitSpec
 from fleet_sim.prices.curves import FAMILIES
 from fleet_sim.prices.dataset import (
     PriceDataset,
     PriceObservation,
-    SplitSpec,
-    load_and_align,
-    split_dataset,
+    build_dataset,
+    final_test_split,
+    selection_data,
+    selection_folds,
+    summarise,
 )
-from fleet_sim.prices.evaluation import EvaluationReport, evaluate
 from fleet_sim.prices.targets import TARGETS
-from fleet_sim.stubs import (
-    StubActiveError,
-    active_stubs,
-    begin_stub_run,
-    require_no_stubs,
-)
+from fleet_sim.stubs import StubActiveError, begin_stub_run, require_no_stubs
 
 
-def _synthetic_observations() -> list[PriceObservation]:
-    """96 observations: 48 slots on 2024-06-15 and 48 on 2023-06-15."""
-    rows: list[PriceObservation] = []
-    for year in (2023, 2024):
-        base = datetime(year, 6, 15, tzinfo=UTC)
-        for slot in range(48):
-            stamp = base + timedelta(minutes=30 * slot)
-            r_gw = 20.0 + 20.0 * slot / 47
-            # price = 40 + 2 * r_gw  (linear, so a real fit could recover it)
-            price = 40.0 + 2.0 * r_gw
-            rows.append(
-                PriceObservation(
-                    settlement_start=stamp,
-                    wholesale_price_gbp_per_mwh=price,
-                    residual_load_gw=r_gw,
-                    fuel_cost_gbp_per_mwh=30.0,
-                    year=year,
-                )
-            )
-    return rows
-
-
-def _test_config(tmp_path: Path) -> CalibrationConfig:
-    """A config that works with the synthetic observations."""
+def _config(tmp_path: Path) -> CalibrationConfig:
+    """A config whose data range is the single day 2024-06-15."""
     return CalibrationConfig.model_validate(
         {
             "data": {
-                "start": "2023-01-01",
-                "end": "2025-12-31",
+                "start": "2024-06-15",
+                "end": "2024-06-15",
                 "cache_dir": str(tmp_path / "cache"),
                 "agile_regions": ["C"],
             },
@@ -63,14 +39,9 @@ def _test_config(tmp_path: Path) -> CalibrationConfig:
                 "gas_carbon_intensity": 0.184,
                 "include_carbon_price_support": True,
             },
-            "dataset": {
-                "drop_capped_slots": True,
-                "min_coverage": 0.9,
-            },
             "splits": {
-                "training_years": [2023, 2024],
-                "selection": "leave_one_year_out",
-                "final_test_year": 2025,
+                "training_years": [2022, 2023],
+                "final_test_year": 2024,
             },
             "models": {
                 "families": ["constant"],
@@ -91,151 +62,136 @@ def _test_config(tmp_path: Path) -> CalibrationConfig:
     )
 
 
-def _synthetic_residual_load(
-    *,
-    start_year: int,
-    end_year: int,
-    **_kwargs: object,
-) -> list[tuple[datetime, float]]:
-    """Synthetic residual load for pipeline tests (no network)."""
-    rows: list[tuple[datetime, float]] = []
-    for year in range(start_year, end_year + 1):
-        base = datetime(year, 6, 15, tzinfo=UTC)
-        for day_offset in range(2):
-            day_start = base + timedelta(days=day_offset)
-            for slot in range(48):
-                stamp = day_start + timedelta(minutes=30 * slot)
-                load_gw = 20.0 + 20.0 * slot / 47
-                rows.append((stamp, load_gw))
-    return rows
+def _rate(stamp: datetime, price: float, *, capped: bool = False) -> InvertedRate:
+    return InvertedRate(
+        settlement_start=stamp,
+        wholesale_gbp_per_mwh=price,
+        capped=capped,
+        product_code="AGILE-TEST",
+        region="C",
+    )
 
 
-def _synthetic_fuel_cost(
-    *,
-    start_year: int,
-    end_year: int,
-    **_kwargs: object,
-) -> list[tuple[datetime, float]]:
-    """Constant synthetic fuel cost for pipeline tests (no network)."""
-    rows: list[tuple[datetime, float]] = []
-    for year in range(start_year, end_year + 1):
-        base = datetime(year, 6, 15, tzinfo=UTC)
-        for slot in range(2 * 48):
-            rows.append((base + timedelta(minutes=30 * slot), 30.0))
-    return rows
+def _dataset(rows: list[tuple[int, float, float, float]]) -> PriceDataset:
+    """A dataset from ``(year, π, R, k)`` rows, one slot apart on 15 June."""
+    observations = [
+        PriceObservation(
+            settlement_start=settlement_periods_utc(date(year, 6, 15))[i],
+            wholesale_price_gbp_per_mwh=price,
+            residual_load_gw=load,
+            fuel_cost_gbp_per_mwh=cost,
+            year=year,
+        )
+        for i, (year, price, load, cost) in enumerate(rows)
+    ]
+    return PriceDataset(observations=observations, drops=[])
 
 
-def test_compare_completes_and_lists_stubs(
+def test_build_dataset_drops_and_counts_each_rule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The compare pipeline runs end to end and reports active stubs."""
+    """One UK summer day: 48 settlement periods, four of them dropped.
+
+    Slot 0: capped (also missing k, but counted once, under the first rule)
+    Slot 1: no Agile price
+    Slot 2: no residual load
+    Slot 3: no fuel cost
+    Kept: 48 - 4 = 44, starting at slot 4.
+    """
+    stamps = settlement_periods_utc(date(2024, 6, 15))
+    rates = [_rate(s, 50.0 + i, capped=i == 0) for i, s in enumerate(stamps) if i != 1]
+    loads = [(s, 25.0 + i) for i, s in enumerate(stamps) if i != 2]
+    costs = [(s, 60.0) for i, s in enumerate(stamps) if i not in (0, 3)]
+    monkeypatch.setattr("fleet_sim.prices.dataset.invert_rates", lambda **_: rates)
     monkeypatch.setattr(
-        "fleet_sim.prices.dataset.load_residual_load", _synthetic_residual_load
+        "fleet_sim.prices.dataset.load_residual_load", lambda **_: loads
     )
-    monkeypatch.setattr(
-        "fleet_sim.prices.dataset.compute_fuel_cost", _synthetic_fuel_cost
-    )
-    begin_stub_run()
-    config = _test_config(tmp_path)
-    dataset = load_and_align(config)
+    monkeypatch.setattr("fleet_sim.prices.dataset.compute_fuel_cost", lambda **_: costs)
 
-    results = []
-    for family_name in config.models.families:
-        family = FAMILIES[family_name]
-        for target_name in config.models.targets:
-            target = TARGETS[target_name]
-            model_name = f"{target_name}/{family_name}"
+    dataset = build_dataset(_config(tmp_path))
 
-            test_year = config.splits.training_years[-1]
-            train_years = [y for y in config.splits.training_years if y != test_year]
-            spec = SplitSpec(
-                train_years=train_years,
-                test_years=[test_year],
-                final_test_year=config.splits.final_test_year,
-            )
-            train_data, test_data = split_dataset(dataset, spec)
-
-            r_train = [obs.residual_load_gw for obs in train_data.observations]
-            y_train = [target.to_target(obs) for obs in train_data.observations]
-            fitted = family.fit(r_train, y_train)
-
-            result = evaluate(
-                fitted,
-                train_data,
-                test_data,
-                target,
-                model_name=model_name,
-                curve_family=family_name,
-                target_name=target_name,
-            )
-            results.append(result)
-
-    report = EvaluationReport(results=results)
-    assert len(report.results) == 1
-    assert report.results[0].model_name == "raw_pooled/constant"
-
-    stubs = active_stubs()
-    assert len(stubs) > 0
-    stub_text = "\n".join(stubs)
-    assert "constant placeholder" in stub_text
-    assert "synthetic" in stub_text.lower()
+    [drops] = dataset.drops
+    assert drops.year == 2024
+    assert drops.expected_slots == 48
+    assert (drops.capped, drops.missing_price) == (1, 1)
+    assert (drops.missing_residual_load, drops.missing_fuel_cost) == (1, 1)
+    assert drops.kept == len(dataset.observations) == 44
+    first = dataset.observations[0]
+    assert first.settlement_start == stamps[4]
+    assert first.wholesale_price_gbp_per_mwh == 54.0
+    assert first.residual_load_gw == 29.0
+    assert first.fuel_cost_gbp_per_mwh == 60.0
 
 
-def test_finalise_refuses_when_chosen_empty(tmp_path: Path) -> None:
-    """Finalise raises when [chosen] main is empty."""
-    config = _test_config(tmp_path)
-    assert config.chosen.main == ""
-    with pytest.raises(ValueError, match="empty"):
-        if not config.chosen.main:
-            raise ValueError(
-                "[chosen] main is empty — run compare first and pick a model"
-            )
+def test_folds_hold_out_each_training_year_and_never_the_final_year() -> None:
+    dataset = _dataset([(y, 50.0, 30.0, 25.0) for y in (2021, 2022, 2023, 2024)])
+    spec = SplitSpec(training_years=[2021, 2022, 2023], final_test_year=2024)
+
+    folds = selection_folds(dataset, spec)
+
+    assert [f.held_out_year for f in folds] == [2021, 2022, 2023]
+    for fold in folds:
+        assert fold.test.years == [fold.held_out_year]
+        assert fold.train.years == [
+            y for y in spec.training_years if y != fold.held_out_year
+        ]
+    assert selection_data(dataset, spec).years == [2021, 2022, 2023]
+    train, test = final_test_split(dataset, spec)
+    assert train.years == [2021, 2022, 2023]
+    assert test.years == [2024]
 
 
-def test_finalise_refuses_params_while_stubs_active(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("training_years", "final_test_year", "message"),
+    [
+        ([2023], 2024, "at least 2 training years"),
+        ([2022, 2022], 2024, "duplicates"),
+        ([2022, 2023], 2023, "also a training year"),
+        ([2022, 2024], 2023, "after every training year"),
+    ],
+)
+def test_split_spec_rejects(
+    training_years: list[int], final_test_year: int, message: str
 ) -> None:
-    """Finalise refuses to write the parameters file when stubs ran."""
-    monkeypatch.setattr(
-        "fleet_sim.prices.dataset.load_residual_load", _synthetic_residual_load
+    with pytest.raises(ValueError, match=message):
+        SplitSpec(training_years=training_years, final_test_year=final_test_year)
+
+
+def test_summarise_per_year() -> None:
+    """Hand-worked.
+
+    2023: π = 10, 30 → mean 20; R = 20, 26 → mean 23; k = 5, 7 → mean 6.
+    2024: one row, so mean = min = max.
+    """
+    dataset = _dataset(
+        [(2023, 10.0, 20.0, 5.0), (2023, 30.0, 26.0, 7.0), (2024, -5.0, 15.0, 40.0)]
     )
-    monkeypatch.setattr(
-        "fleet_sim.prices.dataset.compute_fuel_cost", _synthetic_fuel_cost
+
+    first, second = summarise(dataset)
+
+    assert first.year == 2023
+    assert first.rows == 2
+    assert first.price_mean_gbp_per_mwh == pytest.approx(20.0)
+    assert (first.price_min_gbp_per_mwh, first.price_max_gbp_per_mwh) == (10.0, 30.0)
+    assert first.residual_load_mean_gw == pytest.approx(23.0)
+    assert (first.residual_load_min_gw, first.residual_load_max_gw) == (20.0, 26.0)
+    assert first.fuel_cost_mean_gbp_per_mwh == pytest.approx(6.0)
+    assert (first.fuel_cost_min_gbp_per_mwh, first.fuel_cost_max_gbp_per_mwh) == (
+        5.0,
+        7.0,
     )
+    assert second.year == 2024
+    assert second.rows == 1
+    assert second.price_mean_gbp_per_mwh == second.price_min_gbp_per_mwh == -5.0
+
+
+def test_require_no_stubs_raises_after_a_stub_ran() -> None:
+    """Finalise must not write parameters once any stub has run."""
     begin_stub_run()
-    config = _test_config(tmp_path)
-    dataset = load_and_align(config)
+    FAMILIES["constant"].fit([1.0], [1.0])
 
-    family = FAMILIES["constant"]
-    target = TARGETS["raw_pooled"]
-    r = [obs.residual_load_gw for obs in dataset.observations]
-    y = [target.to_target(obs) for obs in dataset.observations]
-    family.fit(r, y)
-
-    stubs = active_stubs()
-    assert len(stubs) > 0
     with pytest.raises(StubActiveError):
         require_no_stubs()
-
-
-def test_compare_never_reads_final_test_year() -> None:
-    """split_dataset excludes the final test year from both splits."""
-    observations = _synthetic_observations()
-    dataset = PriceDataset(observations=observations)
-
-    spec = SplitSpec(
-        train_years=[2023],
-        test_years=[2024],
-        final_test_year=2025,
-    )
-    train, test = split_dataset(dataset, spec)
-
-    train_years = {obs.year for obs in train.observations}
-    test_years = {obs.year for obs in test.observations}
-    assert 2025 not in train_years
-    assert 2025 not in test_years
-    assert train_years == {2023}
-    assert test_years == {2024}
 
 
 def test_price_observation_year_must_match_timestamp() -> None:
@@ -247,16 +203,6 @@ def test_price_observation_year_must_match_timestamp() -> None:
             residual_load_gw=30.0,
             fuel_cost_gbp_per_mwh=25.0,
             year=2023,
-        )
-
-
-def test_split_spec_rejects_overlap() -> None:
-    """SplitSpec rejects overlapping train and test years."""
-    with pytest.raises(Exception, match="overlap"):
-        SplitSpec(
-            train_years=[2023, 2024],
-            test_years=[2024],
-            final_test_year=2025,
         )
 
 

@@ -1,5 +1,5 @@
-{"data": [
+[
   {"dataset": "FUELHH", "publishTime": "2023-06-14T23:30:00Z", "startTime": "2023-06-14T23:00:00Z", "settlementDate": "2023-06-15", "settlementPeriod": 1, "fuelType": "WIND", "generation": 5000},
   {"dataset": "FUELHH", "publishTime": "2023-06-14T23:30:00Z", "startTime": "2023-06-14T23:30:00Z", "settlementDate": "2023-06-15", "settlementPeriod": 2, "fuelType": "WIND", "generation": 4800},
   {"dataset": "FUELHH", "publishTime": "2023-06-15T00:30:00Z", "startTime": "2023-06-15T00:00:00Z", "settlementDate": "2023-06-15", "settlementPeriod": 3, "fuelType": "WIND", "generation": 4600}
-]}
+]

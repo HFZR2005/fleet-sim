@@ -1,4 +1,4 @@
-from fleet_sim.prices.config import CalibrationConfig, load_config
+from fleet_sim.prices.config import CalibrationConfig, SplitSpec, load_config
 from fleet_sim.prices.curves import (
     FAMILIES,
     ConstantCurve,
@@ -6,11 +6,16 @@ from fleet_sim.prices.curves import (
     PriceCurve,
 )
 from fleet_sim.prices.dataset import (
+    Fold,
     PriceDataset,
     PriceObservation,
-    SplitSpec,
-    load_and_align,
-    split_dataset,
+    YearDrops,
+    YearSummary,
+    build_dataset,
+    final_test_split,
+    selection_data,
+    selection_folds,
+    summarise,
 )
 from fleet_sim.prices.evaluation import EvaluationReport, FitResult, evaluate
 from fleet_sim.prices.figures import plot_evaluation_summary, plot_price_vs_residual
@@ -25,16 +30,22 @@ __all__ = [
     "EvaluationReport",
     "FitResult",
     "FittedCurve",
+    "Fold",
     "PriceCurve",
     "PriceDataset",
     "PriceObservation",
     "SplitSpec",
     "Target",
+    "YearDrops",
+    "YearSummary",
+    "build_dataset",
     "evaluate",
-    "load_and_align",
+    "final_test_split",
     "load_config",
     "plot_evaluation_summary",
     "plot_price_vs_residual",
     "price_response_mwh",
-    "split_dataset",
+    "selection_data",
+    "selection_folds",
+    "summarise",
 ]

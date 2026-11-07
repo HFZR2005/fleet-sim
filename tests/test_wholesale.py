@@ -120,6 +120,8 @@ def test_peak_is_four_to_seven_uk_local(stamp: datetime, expected: bool) -> None
     [
         (date(2020, 6, 1), "AGILE-18-02-21"),
         (date(2023, 1, 1), "AGILE-22-08-31"),
+        # AGILE-24-10-01 has no rates before 16 September 2024.
+        (date(2024, 9, 10), "AGILE-23-12-06"),
         (date(2024, 10, 15), "AGILE-24-10-01"),
     ],
 )

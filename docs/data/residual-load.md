@@ -84,8 +84,11 @@ computation in MW.
 
 ### Elexon generation by fuel type (FUELHH)
 
-- Endpoint: `https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH`
-- Query params: `settlementDateFrom`, `settlementDateTo`, `fuelType=WIND`
+- Endpoint: `https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH/stream`
+  (the plain dataset endpoint rejects ranges longer than 7 days)
+- Query params: `settlementDateFrom`, `settlementDateTo`, `fuelType=WIND`;
+  one calendar month per request
+- Response: a JSON array of records
 - No API key required
 - Licence: Creative Commons Attribution 4.0 (CC BY 4.0)
 - Fields used: `settlementDate`, `settlementPeriod`, `generation`

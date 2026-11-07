@@ -57,8 +57,8 @@ A separate pipeline calibrates price curves: the relationship between wholesale 
 
 ### Stages
 
-1. **Load.** Three data loaders in `fleet_sim/data/` provide wholesale prices (inverted from Agile), residual load, and marginal fuel cost. `load_and_align` in `prices/dataset.py` joins them on timestamp into `PriceObservation` records.
-2. **Split.** `split_dataset` partitions observations by year into training and test sets. The `compare` mode never reads the final-test year.
+1. **Load.** Three data loaders in `fleet_sim/data/` provide wholesale prices (inverted from Agile), residual load, and marginal fuel cost. `build_dataset` in `prices/dataset.py` joins them on settlement period into `PriceObservation` records. It drops capped Agile slots and slots missing any input, and records per year how many each rule dropped. `summarise` gives rows and the mean and range of π, R and k per year.
+2. **Split.** Splits are by whole year, because neighbouring half-hours are near-duplicates. `selection_folds` makes the leave-one-year-out folds for model selection, over the training years only. `final_test_split` is the only function that returns final-test rows; `compare` never calls it.
 3. **Transform.** A `Target` extracts the dependent variable from each observation. Raw targets use the wholesale price directly; the fuel-adjusted target subtracts fuel cost. A target also says whether to fit per year or pool all years.
 4. **Fit.** A `PriceCurve` fits `(residual_load, y)` data and returns a `FittedCurve` with `predict` and `slope` methods. No family knows about targets.
 5. **Evaluate.** `evaluate` scores the fitted curve on held-out data, producing a `FitResult` with RMSE and R² metrics.
@@ -71,8 +71,10 @@ A model is a (curve family, target) pair. The family does not know about targets
 | Type | Role |
 | --- | --- |
 | `PriceObservation` | One half-hour: timestamp, wholesale price (£/MWh), residual load (GW), fuel cost (£/MWh), year |
-| `PriceDataset` | A collection of aligned observations |
-| `SplitSpec` | Which years go into training, testing, and final testing |
+| `PriceDataset` | Aligned observations, with the per-year drop counts (`YearDrops`) that produced them |
+| `SplitSpec` | `[splits]` config: training years and the final-test year, which must come after them |
+| `Fold` | One leave-one-year-out split: held-out year, train and test datasets |
+| `YearSummary` | Rows and the mean and range of π, R and k for one year |
 | `FittedCurve` | Protocol: `predict(r_gw)` and `slope(r_gw)` |
 | `PriceCurve` | Protocol: `fit(r_gw, y) -> FittedCurve` |
 | `Target` | Protocol: `to_target(obs) -> y`, `to_price(y, obs) -> price`, `per_year` flag |

@@ -1,9 +1,11 @@
 """Loader for Elexon half-hourly generation by fuel type.
 
 Downloads transmission-connected wind generation from the Elexon
-Insights API (FUELHH dataset).  No API key is required.
+Insights API (FUELHH dataset), one month per request.  No API key is
+required.  The ``/stream`` endpoint is used because the plain dataset
+endpoint rejects ranges longer than 7 days.
 
-Source: https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH
+Source: https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH/stream
 Licence: Creative Commons Attribution 4.0 (CC BY 4.0).
 """
 
@@ -19,7 +21,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 _DEFAULT_CACHE_DIR = Path(".cache") / "prices"
-_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH"
+_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH/stream"
 
 
 class ElexonWindRow(BaseModel):
@@ -82,15 +84,14 @@ def _download_month(
 
 
 def _parse_response(raw: bytes, year: int) -> list[ElexonWindRow]:
-    """Parse Elexon FUELHH JSON into wind rows."""
+    """Parse an Elexon FUELHH stream response (a JSON array) into wind rows."""
     try:
-        payload = json.loads(raw)
+        data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise ValueError("Elexon FUELHH response is not valid JSON") from exc
 
-    data = payload.get("data")
     if not isinstance(data, list):
-        raise TypeError("Elexon FUELHH response has no 'data' array")
+        raise TypeError("Elexon FUELHH stream response is not a JSON array")
 
     rows: list[ElexonWindRow] = []
     for record in data:
