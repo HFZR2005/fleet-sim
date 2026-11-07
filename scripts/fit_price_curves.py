@@ -13,12 +13,14 @@ import sys
 from pathlib import Path
 
 from fleet_sim.prices.config import CalibrationConfig, load_config
-from fleet_sim.prices.curves import FAMILIES, FittedCurve
+from fleet_sim.prices.curves import FAMILIES, FittedCurve, PriceCurve
 from fleet_sim.prices.dataset import (
     PriceDataset,
-    SplitSpec,
-    load_and_align,
-    split_dataset,
+    build_dataset,
+    final_test_split,
+    selection_data,
+    selection_folds,
+    summarise,
 )
 from fleet_sim.prices.evaluation import EvaluationReport, FitResult, evaluate
 from fleet_sim.prices.figures import plot_evaluation_summary, plot_price_vs_residual
@@ -48,32 +50,51 @@ def main() -> None:
 
 
 def _compare(config: CalibrationConfig) -> None:
-    """Run all (family, target) models and print a comparison."""
-    begin_stub_run()
-    dataset = load_and_align(config)
+    """Fit every (family, target) model on each leave-one-year-out fold.
 
-    results: list[FitResult] = []
+    Only the training years are read; the final-test year is left out.
+    """
+    begin_stub_run()
+    dataset = build_dataset(config)
+    _print_dataset(dataset)
+    selection = selection_data(dataset, config.splits)
+    folds = selection_folds(dataset, config.splits)
+
+    output_dir = Path(config.output.results_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    results_by_year: dict[int, list[FitResult]] = {f.held_out_year: [] for f in folds}
+    all_results: list[FitResult] = []
     for family_name in config.models.families:
         family = FAMILIES[family_name]
         for target_name in config.models.targets:
             target = TARGETS[target_name]
             model_name = f"{target_name}/{family_name}"
-            fit_result, fitted = _fit_and_evaluate(
-                dataset, config, family_name, target_name, family, target, model_name
-            )
-            results.append(fit_result)
+            for fold in folds:
+                fit_result, _fitted = _fit_and_evaluate(
+                    fold.train,
+                    fold.test,
+                    family_name,
+                    target_name,
+                    family,
+                    target,
+                    model_name,
+                )
+                results_by_year[fold.held_out_year].append(fit_result)
+                all_results.append(fit_result)
 
-            output_dir = Path(config.output.results_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-            fig = plot_price_vs_residual(dataset, fitted, target, title=model_name)
+            fitted = _fit(family, target, selection)
+            fig = plot_price_vs_residual(selection, fitted, target, title=model_name)
             save_figure(fig, output_dir / f"scatter_{model_name.replace('/', '_')}")
 
-    report = EvaluationReport(results=results)
-    output_dir = Path(config.output.results_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    save_figure(plot_evaluation_summary(report), output_dir / "comparison")
+    save_figure(
+        plot_evaluation_summary(EvaluationReport(results=all_results)),
+        output_dir / "comparison",
+    )
 
-    _print_report(report)
+    for year, results in results_by_year.items():
+        print(f"\nHeld out {year}")
+        _print_report(EvaluationReport(results=results))
 
     stubs = active_stubs()
     if stubs:
@@ -87,7 +108,9 @@ def _finalise(config: CalibrationConfig) -> None:
     if not config.chosen.main:
         raise ValueError("[chosen] main is empty — run compare first and pick a model")
     begin_stub_run()
-    dataset = load_and_align(config)
+    dataset = build_dataset(config)
+    _print_dataset(dataset)
+    train_data, test_data = final_test_split(dataset, config.splits)
 
     chosen = config.chosen.main
     parts = chosen.split("/")
@@ -98,14 +121,7 @@ def _finalise(config: CalibrationConfig) -> None:
     target = TARGETS[target_name]
 
     fit_result, _fitted = _fit_and_evaluate(
-        dataset,
-        config,
-        family_name,
-        target_name,
-        family,
-        target,
-        chosen,
-        include_final_test=True,
+        train_data, test_data, family_name, target_name, family, target, chosen
     )
 
     _print_report(EvaluationReport(results=[fit_result]))
@@ -129,39 +145,16 @@ def _finalise(config: CalibrationConfig) -> None:
 
 
 def _fit_and_evaluate(
-    dataset: PriceDataset,
-    config: CalibrationConfig,
+    train_data: PriceDataset,
+    test_data: PriceDataset,
     family_name: str,
     target_name: str,
-    family: object,
+    family: PriceCurve,
     target: Target,
     model_name: str,
-    *,
-    include_final_test: bool = False,
 ) -> tuple[FitResult, FittedCurve]:
-    """Transform, split, fit, and evaluate one model."""
-    from fleet_sim.prices.curves import PriceCurve
-
-    curve: PriceCurve = family  # type: ignore[assignment]
-
-    if include_final_test:
-        test_years = [config.splits.final_test_year]
-        train_years = list(config.splits.training_years)
-    else:
-        test_years = _leave_one_out_years(config.splits.training_years)
-        train_years = [y for y in config.splits.training_years if y not in test_years]
-
-    spec = SplitSpec(
-        train_years=train_years,
-        test_years=test_years,
-        final_test_year=config.splits.final_test_year,
-    )
-    train_data, test_data = split_dataset(dataset, spec)
-
-    r_train = [obs.residual_load_gw for obs in train_data.observations]
-    y_train = [target.to_target(obs) for obs in train_data.observations]
-    fitted = curve.fit(r_train, y_train)
-
+    """Fit one model on ``train_data`` and score it on ``test_data``."""
+    fitted = _fit(family, target, train_data)
     result = evaluate(
         fitted,
         train_data,
@@ -174,11 +167,48 @@ def _fit_and_evaluate(
     return result, fitted
 
 
-def _leave_one_out_years(training_years: list[int]) -> list[int]:
-    """Stub split: use the last training year as the test year."""
-    if len(training_years) < 2:
-        raise ValueError("need at least 2 training years for leave-one-out")
-    return [training_years[-1]]
+def _fit(family: PriceCurve, target: Target, data: PriceDataset) -> FittedCurve:
+    """Fit ``family`` to ``(R, y)`` pairs taken from ``data``."""
+    r = [obs.residual_load_gw for obs in data.observations]
+    y = [target.to_target(obs) for obs in data.observations]
+    return family.fit(r, y)
+
+
+def _print_dataset(dataset: PriceDataset) -> None:
+    """Print slots dropped per rule, then rows and the range of π, R, k per year."""
+    print(
+        f"{'Year':<6} {'Expected':>9} {'Capped':>7} {'No π':>6} "
+        f"{'No R':>6} {'No k':>6} {'Kept':>7}"
+    )
+    for d in dataset.drops:
+        print(
+            f"{d.year:<6} {d.expected_slots:>9} {d.capped:>7} {d.missing_price:>6} "
+            f"{d.missing_residual_load:>6} {d.missing_fuel_cost:>6} {d.kept:>7}"
+        )
+    print(
+        f"\n{'Year':<6} {'Rows':>7} "
+        f"{'π mean [min, max] £/MWh':>28} "
+        f"{'R mean [min, max] GW':>26} "
+        f"{'k mean [min, max] £/MWh':>28}"
+    )
+    for s in summarise(dataset):
+        price = _spread(
+            s.price_mean_gbp_per_mwh, s.price_min_gbp_per_mwh, s.price_max_gbp_per_mwh
+        )
+        load = _spread(
+            s.residual_load_mean_gw, s.residual_load_min_gw, s.residual_load_max_gw
+        )
+        cost = _spread(
+            s.fuel_cost_mean_gbp_per_mwh,
+            s.fuel_cost_min_gbp_per_mwh,
+            s.fuel_cost_max_gbp_per_mwh,
+        )
+        print(f"{s.year:<6} {s.rows:>7} {price:>28} {load:>26} {cost:>28}")
+    print()
+
+
+def _spread(mean: float, low: float, high: float) -> str:
+    return f"{mean:.1f} [{low:.1f}, {high:.1f}]"
 
 
 def _print_report(report: EvaluationReport) -> None:

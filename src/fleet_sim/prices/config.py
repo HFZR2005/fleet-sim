@@ -10,7 +10,13 @@ import tomllib
 from datetime import date
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 
 class DataConfig(BaseModel):
@@ -41,37 +47,43 @@ class FuelCostConfig(BaseModel):
     include_carbon_price_support: bool
 
 
-class DatasetConfig(BaseModel):
-    """``[dataset]`` section: filters applied when building observations."""
+class SplitSpec(BaseModel):
+    """``[splits]`` section: training years and the sealed final-test year.
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    drop_capped_slots: bool
-    min_coverage: float
-
-    @field_validator("min_coverage")
-    @classmethod
-    def coverage_is_fraction(cls, value: float) -> float:
-        if not 0.0 <= value <= 1.0:
-            raise ValueError(f"min_coverage must be in [0, 1] (got {value})")
-        return value
-
-
-class SplitsConfig(BaseModel):
-    """``[splits]`` section: which years train, validate, and test."""
+    Model selection is leave-one-year-out across ``training_years``.
+    ``final_test_year`` is the most recent complete year and is read
+    only by the final evaluation, after a model has been chosen.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     training_years: list[int]
-    selection: str
     final_test_year: int
 
     @field_validator("training_years")
     @classmethod
-    def at_least_one_training_year(cls, value: list[int]) -> list[int]:
-        if not value:
-            raise ValueError("training_years must not be empty")
+    def distinct_and_enough(cls, value: list[int]) -> list[int]:
+        if len(value) < 2:
+            raise ValueError(
+                f"leave-one-year-out needs at least 2 training years (got {len(value)})"
+            )
+        if len(set(value)) != len(value):
+            raise ValueError(f"training_years has duplicates: {value}")
         return value
+
+    @model_validator(mode="after")
+    def final_year_after_training(self) -> SplitSpec:
+        if self.final_test_year in self.training_years:
+            raise ValueError(
+                f"final_test_year {self.final_test_year} is also a training year"
+            )
+        latest = max(self.training_years)
+        if self.final_test_year < latest:
+            raise ValueError(
+                f"final_test_year {self.final_test_year} must be after "
+                f"every training year (latest is {latest})"
+            )
+        return self
 
 
 class ModelsConfig(BaseModel):
@@ -130,8 +142,7 @@ class CalibrationConfig(BaseModel):
 
     data: DataConfig
     fuel_cost: FuelCostConfig
-    dataset: DatasetConfig
-    splits: SplitsConfig
+    splits: SplitSpec
     models: ModelsConfig
     evaluation: EvaluationConfig
     chosen: ChosenConfig
