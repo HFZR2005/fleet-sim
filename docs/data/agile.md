@@ -74,7 +74,7 @@ minimise the number of capped (lost) slots.
 | AGILE-22-07-22 | 52.38 | 55 | ~Jun 2022 |
 | AGILE-22-08-31 | 74.29 | 78 | ~Aug 2022 |
 | AGILE-23-12-06 | 95.23 | 100 | ~Dec 2023 |
-| AGILE-24-10-01 | 95.23 | 100 | ~Sep 2024 |
+| AGILE-24-10-01 | 95.23 | 100 | 16 Sep 2024 |
 
 AGILE-23-12-06 and AGILE-24-10-01 share the same effective cap (100 p
 inc VAT).  For dates before June 2022, only AGILE-18-02-21 is available

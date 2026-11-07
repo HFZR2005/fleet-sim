@@ -81,7 +81,8 @@ AGILE_VERSIONS: list[AgileVersion] = [
     AgileVersion(
         product_code="AGILE-24-10-01",
         cap_exc_vat_p_per_kwh=95.23,
-        available_from=date(2024, 9, 1),
+        # First rates are for 00:00 UK time on 16 September 2024.
+        available_from=date(2024, 9, 16),
     ),
     AgileVersion(
         product_code="AGILE-23-12-06",
