@@ -440,7 +440,7 @@ The cubic, signed quadratic and cubic with offset are linear in their parameters
 | Signed quadratic | $`a\, \operatorname{sgn}(R)\, R^2 = a R \lvert R\rvert`$ | $`2 a \lvert R\rvert`$ | $`\hat a = \sum_i y_i R_i \lvert R_i\rvert \big/ \sum_i R_i^4`$ |
 | Cubic with offset | $`a_0 + a_1 R + a_3 R^3`$ | $`a_1 + 3 a_3 R^2`$ | Normal equations with $`x(R) = (1, R, R^3)`$ |
 | Exponential | $`\alpha + \beta \, (e^{\gamma R} - 1) / \gamma`$, and $`\alpha + \beta R`$ at $`\gamma = 0`$ | $`\beta e^{\gamma R}`$ | Iterative, from a profiled start (below) |
-| Isotonic | Non-decreasing, linear between knots | Finite difference between knots | Pool adjacent violators (below) |
+| Isotonic | Non-decreasing, linear between knots | Finite difference between knots | Pool adjacent violators; EM with censored slots (below) |
 
 For the one-parameter families, $`X`$ is a single column $`x_i`$, so the normal equations reduce to $`\hat a = \sum_i x_i y_i / \sum_i x_i^2`$. That is $`x_i = R_i^3`$ for the cubic and $`x_i = R_i \lvert R_i\rvert`$ for the signed quadratic, whose square is $`R_i^4`$. The estimate is undefined when every $`R_i = 0`$. The cubic with offset needs at least three distinct $`R_i`$ for $`X^\top X`$ to be invertible.
 
@@ -460,13 +460,35 @@ Dividing by the range of $`R`$ keeps $`\gamma R`$ of order one whatever the unit
 
 ### Isotonic
 
-The isotonic fit solves
+The least-squares isotonic fit solves
 
 ```math
 \min_{h_1 \le h_2 \le \dots \le h_n} \sum_j w_j \bigl(\bar y_j - h_j\bigr)^2,
 ```
 
 where $`R_1 < \dots < R_n`$ are the distinct residual loads, $`\bar y_j`$ is the mean of the $`y_i`$ at $`R_j`$ and $`w_j`$ is how many there are. Merging ties this way leaves the least-squares solution unchanged. The pool adjacent violators algorithm solves it exactly. The solution is constant on blocks of neighbouring $`R_j`$. Each block becomes one knot at its weighted mean residual load, $`\sum w_j R_j / \sum w_j`$ over the block, with the block's value.
+
+With censored slots, $`\ell(h, \sigma)`$ is maximised over non-decreasing $`h`$ by expectation–maximisation (EM). It starts from the least-squares fit to the lower bounds, with $`\sigma`$ the RMS residual, and repeats two steps:
+
+- **E-step.** Each censored slot is replaced by the mean $`m_i`$ and variance $`v_i`$ of $`y \sim N(h(R_i), \sigma^2)`$ truncated to $`[l_i, u_i]`$. With $`a_i = (l_i - h(R_i))/\sigma`$, $`b_i = (u_i - h(R_i))/\sigma`$ and $`Z_i = \Phi(b_i) - \Phi(a_i)`$,
+
+  ```math
+  m_i = h(R_i) + \sigma\,\frac{\varphi(a_i) - \varphi(b_i)}{Z_i}, \qquad
+  v_i = \sigma^2 \left[1 + \frac{a_i \varphi(a_i) - b_i \varphi(b_i)}{Z_i} - \left(\frac{\varphi(a_i) - \varphi(b_i)}{Z_i}\right)^2\right],
+  ```
+
+  with $`b_i \varphi(b_i) = 0`$ when $`u_i = \infty`$. An exact slot has $`m_i = y_i`$ and $`v_i = 0`$.
+- **M-step.** $`h`$ becomes the least-squares isotonic fit to the $`m_i`$, and
+
+  ```math
+  \sigma^2 = \frac{1}{N} \sum_i \bigl[v_i + (m_i - h(R_i))^2\bigr].
+  ```
+
+  where $`N`$ is the number of slots. Without the $`v_i`$ term $`\sigma`$ would shrink every round, because $`m_i`$ is less spread than the $`y_i`$ it stands in for.
+
+Each round maximises the expected complete-data log-likelihood, so $`\ell`$ never falls. EM stops when a round raises $`\ell / N`$ by less than $`10^{-10}`$. The fit fails if that takes more than 10 000 rounds. On the price data EM stops within about 200 rounds. Running on to 20 000 rounds raises $`\ell / N`$ by at most about $`10^{-8}`$ more. A few single values of $`h`$ still move by up to about $`\sigma`$, because $`\ell`$ is nearly flat in those directions. With no censored slot, the start is already the answer.
+
+If every slot at the highest residual loads is censored with no upper bound, $`\ell`$ has no maximum: raising $`h`$ on those loads alone makes every one of those slots more likely. So the slots above the highest $`R_i`$ that has a finite $`u_i`$ are left out, and the curve is flat beyond its last knot. In 2021 this leaves out the top 294 slots, and in 2022 the top 86, so the isotonic fit understates the top of the curve in those years.
 
 Between knots $`(\rho_m, v_m)`$ the curve is linear, and beyond the first and last knot it is flat. The slope is the finite difference of the segment that contains $`R`$:
 

@@ -36,8 +36,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from scipy.optimize import curve_fit, isotonic_regression, minimize
 from scipy.stats import norm
 
-from fleet_sim.stubs import stub
-
 _Array = NDArray[np.float64]
 
 _Curve = Callable[[_Array, _Array], _Array]
@@ -466,7 +464,7 @@ class Exponential:
 
 
 class IsotonicFit(BaseModel):
-    """Fitted non-decreasing curve, linear between knots.
+    """Fitted non-decreasing curve, linear between knots, with noise scale σ.
 
     ``predict`` interpolates linearly between the knots (Rⱼ, vⱼ) and is
     flat beyond the first and last knot.  ``slope`` is the finite
@@ -479,6 +477,7 @@ class IsotonicFit(BaseModel):
 
     knots_r_gw: tuple[float, ...]
     values: tuple[float, ...]
+    sigma: float = Field(ge=0.0)
 
     @model_validator(mode="after")
     def _check_knots(self) -> IsotonicFit:
@@ -509,45 +508,154 @@ class IsotonicFit(BaseModel):
         return rise / run
 
 
+# EM for Isotonic stops once a round raises the mean log-likelihood per
+# slot by less than this, and gives up after _EM_MAX_ROUNDS rounds.
+_EM_TOLERANCE = 1e-10
+_EM_MAX_ROUNDS = 10_000
+
+
 class Isotonic:
-    """Best non-decreasing fit, by least squares on the exact slots.
+    """Best non-decreasing fit, by censored maximum likelihood using EM.
 
-    Minimises Σ (yᵢ − h(Rᵢ))² over all h with h(Rᵢ) ≤ h(Rⱼ) whenever
-    Rᵢ ≤ Rⱼ, using ``scipy.optimize.isotonic_regression`` (pool adjacent
-    violators).  Tied Rᵢ are first merged into their mean y, weighted by
-    count.  The solution is constant on blocks of neighbouring R; each
-    block becomes one knot at its count-weighted mean R and its fitted
-    value, and ``IsotonicFit`` interpolates between knots.
-    See ``docs/formulation.md``, Price curves.
+    The curve is h(Rᵢ) at each distinct residual load, constrained so
+    h(Rᵢ) ≤ h(Rⱼ) whenever Rᵢ ≤ Rⱼ, and σ is fitted with it.
 
-    Stub: censored slots are dropped rather than used as bounds.
+    Slots above the highest R with a finite upper bound are left out.
+    If the top slots are all censored [lᵢ, ∞), raising h there makes
+    every one of them more likely, so the likelihood has no maximum.
+    The fitted curve is flat beyond its last knot, so it understates
+    h there.
+
+    EM (expectation–maximisation) alternates two steps from the start:
+    least squares on the lower bounds, with σ the RMS residual.
+
+    - E-step: each censored slot gets the mean mᵢ and variance vᵢ of
+      y ~ N(h(Rᵢ), σ²) truncated to [lᵢ, uᵢ].  An exact slot has
+      mᵢ = yᵢ, vᵢ = 0.
+    - M-step: h ← the least-squares non-decreasing fit to the mᵢ, and
+      σ² ← (1/n) Σ [vᵢ + (mᵢ − h(Rᵢ))²].
+
+    Each round never lowers the censored log-likelihood ℓ.  It stops
+    when a round raises ℓ/n by less than ``_EM_TOLERANCE`` (1e-10), and
+    raises ``ValueError`` after ``_EM_MAX_ROUNDS`` (10 000) rounds.  With
+    no censored slot the start is already the answer.
+
+    The least-squares fit uses ``scipy.optimize.isotonic_regression``
+    (pool adjacent violators), after merging tied Rᵢ into their mean,
+    weighted by count.  The solution is constant on blocks of
+    neighbouring R; each block becomes one knot at its count-weighted
+    mean R and its fitted value, and ``IsotonicFit`` interpolates
+    between knots.  See ``docs/formulation.md``, Price curves, Isotonic.
     """
 
-    @stub("fits exact slots only; censored EM in part 3 of #86")
     def fit(
         self,
         r_gw: Sequence[float],
         y_lower: Sequence[float],
         y_upper: Sequence[float],
     ) -> IsotonicFit:
-        """Return the least-squares ``IsotonicFit`` of the exact slots."""
-        r_all, lower, upper = _as_arrays(r_gw, y_lower, y_upper)
-        exact = lower == upper
-        if not np.any(exact):
-            raise ValueError("Isotonic needs at least one exact slot")
-        r, y_arr = r_all[exact], lower[exact]
+        """Return the maximum-likelihood ``IsotonicFit``."""
+        r, lower, upper = _as_arrays(r_gw, y_lower, y_upper)
+        bounded = np.isfinite(upper)
+        if not np.any(bounded):
+            raise ValueError(
+                "Isotonic needs at least one slot with a finite upper bound"
+            )
+        keep = r <= np.max(r[bounded])
+        r, lower, upper = r[keep], lower[keep], upper[keep]
         r_unique, inverse, counts = np.unique(
             r, return_inverse=True, return_counts=True
         )
-        y_mean = np.bincount(inverse, weights=y_arr) / counts
-        result = isotonic_regression(y_mean, weights=counts)
+        values, blocks, sigma = _isotonic_maximum_likelihood(
+            lower, upper, inverse, counts
+        )
         knots: list[float] = []
-        values: list[float] = []
-        for start, end in itertools.pairwise(result.blocks):
+        knot_values: list[float] = []
+        for start, end in itertools.pairwise(blocks):
             block_counts = counts[start:end]
             knots.append(float(np.average(r_unique[start:end], weights=block_counts)))
-            values.append(float(result.x[start]))
-        return IsotonicFit(knots_r_gw=tuple(knots), values=tuple(values))
+            knot_values.append(float(values[start]))
+        return IsotonicFit(
+            knots_r_gw=tuple(knots), values=tuple(knot_values), sigma=sigma
+        )
+
+
+def _isotonic_least_squares(
+    y: _Array, inverse: NDArray[np.intp], counts: NDArray[np.intp]
+) -> tuple[_Array, NDArray[np.intp]]:
+    """Non-decreasing least-squares fit of y over the distinct R.
+
+    ``inverse`` maps each slot to its distinct R and ``counts`` says how
+    many slots share it.  Returns the fitted value at each distinct R and
+    the start of each constant block (with the end appended).
+    """
+    y_mean = np.bincount(inverse, weights=y) / counts
+    result = isotonic_regression(y_mean, weights=counts)
+    return result.x, result.blocks
+
+
+def _isotonic_maximum_likelihood(
+    lower: _Array,
+    upper: _Array,
+    inverse: NDArray[np.intp],
+    counts: NDArray[np.intp],
+) -> tuple[_Array, NDArray[np.intp], float]:
+    """EM for ``Isotonic``: (values at each distinct R, blocks, σ)."""
+    values, blocks = _isotonic_least_squares(lower, inverse, counts)
+    sigma = math.sqrt(float(np.mean((lower - values[inverse]) ** 2)))
+    censored = lower < upper
+    if not np.any(censored):
+        return values, blocks, sigma
+    if sigma == 0.0:
+        raise ValueError(
+            "cannot start the noise scale: the least-squares start fits "
+            "every lower bound exactly"
+        )
+    n = lower.size
+    log_likelihood = _log_likelihood(values[inverse], lower, upper, sigma) / n
+    for _ in range(_EM_MAX_ROUNDS):
+        mean = lower.copy()
+        mean[censored], variance = _truncated_normal_moments(
+            values[inverse][censored], sigma, lower[censored], upper[censored]
+        )
+        values, blocks = _isotonic_least_squares(mean, inverse, counts)
+        h = values[inverse]
+        sigma = math.sqrt(
+            (float(np.sum(variance)) + float(np.sum((mean - h) ** 2))) / n
+        )
+        previous = log_likelihood
+        log_likelihood = _log_likelihood(h, lower, upper, sigma) / n
+        if log_likelihood - previous < _EM_TOLERANCE:
+            return values, blocks, sigma
+    raise ValueError(f"Isotonic EM did not converge in {_EM_MAX_ROUNDS} rounds")
+
+
+def _truncated_normal_moments(
+    mu: _Array, sigma: float, lower: _Array, upper: _Array
+) -> tuple[_Array, _Array]:
+    """Mean and variance of N(μ, σ²) truncated to [l, u], for l < u.
+
+    With a = (l − μ)/σ, b = (u − μ)/σ and Z = Φ(b) − Φ(a):
+
+        mean     = μ + σ·(φ(a) − φ(b))/Z
+        variance = σ²·[1 + (a·φ(a) − b·φ(b))/Z − ((φ(a) − φ(b))/Z)²],
+
+    with b·φ(b) = 0 at b = ∞.  Each φ/Z is the exponential of a
+    log-difference, so it stays finite far in the tails.  This is what
+    ``scipy.stats.truncnorm.stats`` returns, but over 100 times faster
+    on real data, which matters because EM calls it every round.
+    """
+    a = (lower - mu) / sigma
+    b = (upper - mu) / sigma
+    log_z = _log_interval_probability(a, b)
+    ratio_a = np.exp(norm.logpdf(a) - log_z)
+    ratio_b = np.exp(norm.logpdf(b) - log_z)
+    shift = ratio_a - ratio_b
+    b_ratio_b = np.zeros_like(b)
+    finite = np.isfinite(b)
+    b_ratio_b[finite] = b[finite] * ratio_b[finite]
+    spread = 1.0 + a * ratio_a - b_ratio_b - shift**2
+    return mu + sigma * shift, sigma**2 * np.maximum(spread, 0.0)
 
 
 FAMILIES: dict[str, PriceCurve] = {

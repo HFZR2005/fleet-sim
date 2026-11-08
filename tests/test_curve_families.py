@@ -55,7 +55,9 @@ _CASES: list[tuple[_Family, _Fit, tuple[float, float]]] = [
 
 # A non-decreasing piecewise-linear curve, used as truth for Isotonic.
 _ISOTONIC_TRUTH = IsotonicFit(
-    knots_r_gw=(-10.0, 10.0, 25.0, 40.0), values=(0.0, 20.0, 30.0, 120.0)
+    knots_r_gw=(-10.0, 10.0, 25.0, 40.0),
+    values=(0.0, 20.0, 30.0, 120.0),
+    sigma=_SIGMA,
 )
 
 
@@ -141,15 +143,35 @@ def test_isotonic_hand_worked() -> None:
     Knots at block mean R: (1, 1), (2.5, 2.5), (4, 4).
     predict(2) = 1 + (2 − 1)·(2.5 − 1)/(2.5 − 1) = 2, slope(2) = 1.
     Beyond the last knot: predict(10) = 4, slope(10) = 0.
+    No slot is censored, so σ̂² = SSE / n = (0² + 0.5² + 0.5² + 0²) / 4,
+    σ̂ = √0.125 = 0.35355.
     """
     y = [1.0, 3.0, 2.0, 4.0]
     fitted = Isotonic().fit([1.0, 2.0, 3.0, 4.0], y, y)
     assert fitted.knots_r_gw == pytest.approx((1.0, 2.5, 4.0))
     assert fitted.values == pytest.approx((1.0, 2.5, 4.0))
+    assert fitted.sigma == pytest.approx(0.35355, abs=1e-5)
     assert fitted.predict(2.0) == pytest.approx(2.0)
     assert fitted.slope(2.0) == pytest.approx(1.0)
     assert fitted.predict(10.0) == pytest.approx(4.0)
     assert fitted.slope(10.0) == 0.0
+
+
+def test_isotonic_leaves_out_an_all_censored_top() -> None:
+    """The slot at the highest R is y ≥ 5: the likelihood has no maximum.
+
+    Raising h(4) alone makes P(y ≥ 5) → 1, so the slot is left out and
+    the rest is the hand-worked fit above without R = 4.  R = [1, 2, 3],
+    y = [1, 3, 2]: knots (1, 1), (2.5, 2.5), flat beyond, so
+    predict(4) = 2.5.  σ̂² = (0² + 0.5² + 0.5²) / 3, σ̂ = √(1/6) = 0.40825.
+    """
+    fitted = Isotonic().fit(
+        [1.0, 2.0, 3.0, 4.0], [1.0, 3.0, 2.0, 5.0], [1.0, 3.0, 2.0, math.inf]
+    )
+    assert fitted.knots_r_gw == pytest.approx((1.0, 2.5))
+    assert fitted.values == pytest.approx((1.0, 2.5))
+    assert fitted.predict(4.0) == pytest.approx(2.5)
+    assert fitted.sigma == pytest.approx(0.40825, abs=1e-5)
 
 
 def _linear_least_squares(
@@ -259,6 +281,32 @@ def test_isotonic_recovers_known_curve() -> None:
         assert fitted.predict(float(r_gw)) == pytest.approx(expected, abs=2.0)
 
 
+def test_isotonic_censored_fit_tracks_what_dropping_censored_slots_biases_low() -> None:
+    """Censoring the top quarter of y from a known non-decreasing curve.
+
+    σ = 20, so censoring cuts on noise as well as on R.  Where the curve
+    rises steeply (R = 30 to 35, truth 60 to 90), the EM fit stays within
+    5 of the truth and σ within 5%.  Fitting the exact slots alone keeps
+    only the low draws there, so it falls well below.  Above R ≈ 35 every
+    slot is censored and left out, so the comparison stops at 35.
+    """
+    truth = _ISOTONIC_TRUTH.model_copy(update={"sigma": 20.0})
+    r, y = _synthetic(truth, (-10.0, 40.0), truth.sigma)
+    lower, upper = _censor_top_quarter(y)
+    exact = lower == upper
+
+    censored = Isotonic().fit(r.tolist(), lower.tolist(), upper.tolist())
+    dropped = Isotonic().fit(
+        r[exact].tolist(), lower[exact].tolist(), upper[exact].tolist()
+    )
+
+    assert censored.sigma == pytest.approx(truth.sigma, rel=0.05)
+    for r_gw in (30.0, 32.5, 35.0):
+        expected = truth.predict(r_gw)
+        assert censored.predict(r_gw) == pytest.approx(expected, abs=5.0), r_gw
+        assert dropped.predict(r_gw) < expected - 5.0, r_gw
+
+
 @pytest.mark.parametrize(
     "fitted", [truth for _, truth, _ in _CASES] + [_ISOTONIC_TRUTH]
 )
@@ -298,6 +346,7 @@ def test_slope_matches_finite_difference(
             [1.0, 2.0, 3.0],
             "3 distinct",
         ),
+        (Isotonic(), [1.0], [1.0], [math.inf], "finite upper bound"),
     ],
 )
 def test_fit_rejects_invalid_data(
@@ -324,4 +373,4 @@ def test_isotonic_fit_rejects_invalid_knots(
     knots: tuple[float, ...], values: tuple[float, ...], message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        IsotonicFit(knots_r_gw=knots, values=values)
+        IsotonicFit(knots_r_gw=knots, values=values, sigma=1.0)
