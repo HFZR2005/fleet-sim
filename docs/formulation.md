@@ -414,7 +414,7 @@ A family's parameters $`\theta`$ are chosen by least squares:
 \hat\theta = \arg\min_\theta \sum_i \bigl(y_i - h_\theta(R_i)\bigr)^2.
 ```
 
-Each family below is linear in its parameters, $`h_\theta(R) = x(R)^\top \theta`$ for a feature vector $`x(R)`$. Setting the gradient to zero gives the normal equations $`X^\top X \hat\theta = X^\top y`$, where row $`i`$ of $`X`$ is $`x(R_i)^\top`$.
+The cubic, signed quadratic and cubic with offset are linear in their parameters, $`h_\theta(R) = x(R)^\top \theta`$ for a feature vector $`x(R)`$. Setting the gradient to zero gives the normal equations $`X^\top X \hat\theta = X^\top y`$, where row $`i`$ of $`X`$ is $`x(R_i)^\top`$. The exponential is not linear in $`\gamma`$ and is fitted iteratively. The isotonic family has no fixed formula: it minimises the same sum over every non-decreasing $`h`$.
 
 ### Families
 
@@ -423,10 +423,40 @@ Each family below is linear in its parameters, $`h_\theta(R) = x(R)^\top \theta`
 | Cubic | $`a R^3`$ | $`3 a R^2`$ | $`\hat a = \sum_i y_i R_i^3 \big/ \sum_i R_i^6`$ |
 | Signed quadratic | $`a\, \operatorname{sgn}(R)\, R^2 = a R \lvert R\rvert`$ | $`2 a \lvert R\rvert`$ | $`\hat a = \sum_i y_i R_i \lvert R_i\rvert \big/ \sum_i R_i^4`$ |
 | Cubic with offset | $`a_0 + a_1 R + a_3 R^3`$ | $`a_1 + 3 a_3 R^2`$ | Normal equations with $`x(R) = (1, R, R^3)`$ |
+| Exponential | $`\alpha + \beta e^{\gamma R}`$ | $`\beta \gamma e^{\gamma R}`$ | Iterative, from a profiled start (below) |
+| Isotonic | Non-decreasing, linear between knots | Finite difference between knots | Pool adjacent violators (below) |
 
 For the one-parameter families, $`X`$ is a single column $`x_i`$, so the normal equations reduce to $`\hat a = \sum_i x_i y_i / \sum_i x_i^2`$. That is $`x_i = R_i^3`$ for the cubic and $`x_i = R_i \lvert R_i\rvert`$ for the signed quadratic, whose square is $`R_i^4`$. The estimate is undefined when every $`R_i = 0`$. The cubic with offset needs at least three distinct $`R_i`$ for $`X^\top X`$ to be invertible.
 
 The cubic and the signed quadratic pass through the origin, and both are odd functions, so they rise through zero residual load. The signed quadratic is $`R^2`$ for positive load and $`-R^2`$ for negative load. Its slope is continuous but its second derivative is not.
+
+### Exponential
+
+The sum of squares is minimised over $`(\alpha, \beta, \gamma)`$ by Levenberg–Marquardt (`scipy.optimize.curve_fit`), which needs a starting point. For fixed $`\gamma`$ the model is linear in $`(\alpha, \beta)`$ with features $`x(R) = (1, e^{\gamma R})`$, so the normal equations give the best $`(\alpha, \beta)`$ exactly. The starting point is the best of these over a grid
+
+```math
+\gamma = \pm \frac{c}{\max_i R_i - \min_i R_i}, \qquad c \in \{10^{-1}, \dots, 10^{1}\} \text{ (21 log-spaced values)}.
+```
+
+Dividing by the range of $`R`$ keeps $`\gamma R`$ of order one whatever the units. $`\gamma = 0`$ is left out because $`e^{\gamma R}`$ is then constant and the same feature as $`\alpha`$. The fit needs at least three distinct $`R_i`$.
+
+### Isotonic
+
+The isotonic fit solves
+
+```math
+\min_{h_1 \le h_2 \le \dots \le h_n} \sum_j w_j \bigl(\bar y_j - h_j\bigr)^2,
+```
+
+where $`R_1 < \dots < R_n`$ are the distinct residual loads, $`\bar y_j`$ is the mean of the $`y_i`$ at $`R_j`$ and $`w_j`$ is how many there are. Merging ties this way leaves the least-squares solution unchanged. The pool adjacent violators algorithm solves it exactly. The solution is constant on blocks of neighbouring $`R_j`$. Each block becomes one knot at its weighted mean residual load, $`\sum w_j R_j / \sum w_j`$ over the block, with the block's value.
+
+Between knots $`(\rho_m, v_m)`$ the curve is linear, and beyond the first and last knot it is flat. The slope is the finite difference of the segment that contains $`R`$:
+
+```math
+h'(R) = \frac{v_{m+1} - v_m}{\rho_{m+1} - \rho_m} \quad \text{for } \rho_m \le R < \rho_{m+1},
+```
+
+and $`0`$ outside the knots. Placing knots at block means instead of at every $`R_j`$ avoids a staircase: with a knot at every $`R_j`$, the slope would be zero inside each block and very large across the narrow gap between blocks.
 
 ## Later extensions
 

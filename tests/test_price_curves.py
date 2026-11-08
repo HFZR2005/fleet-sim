@@ -10,7 +10,6 @@ import pytest
 from fleet_sim.data.agile_formula import InvertedRate
 from fleet_sim.data.settlement import settlement_periods_utc
 from fleet_sim.prices.config import CalibrationConfig, SplitSpec
-from fleet_sim.prices.curves import FAMILIES
 from fleet_sim.prices.dataset import (
     PriceDataset,
     PriceObservation,
@@ -22,7 +21,7 @@ from fleet_sim.prices.dataset import (
     summarise,
 )
 from fleet_sim.prices.targets import TARGETS
-from fleet_sim.stubs import StubActiveError, begin_stub_run, require_no_stubs
+from fleet_sim.stubs import StubActiveError, begin_stub_run, require_no_stubs, stub
 
 
 def _config(tmp_path: Path) -> CalibrationConfig:
@@ -45,7 +44,7 @@ def _config(tmp_path: Path) -> CalibrationConfig:
                 "final_test_year": 2024,
             },
             "models": {
-                "families": ["constant"],
+                "families": ["cubic"],
                 "targets": ["raw_pooled"],
             },
             "evaluation": {
@@ -236,8 +235,13 @@ def test_summarise_per_year() -> None:
 
 def test_require_no_stubs_raises_after_a_stub_ran() -> None:
     """Finalise must not write parameters once any stub has run."""
+
+    @stub("test placeholder")
+    def placeholder() -> None:
+        pass
+
     begin_stub_run()
-    FAMILIES["constant"].fit([1.0], [1.0])
+    placeholder()
 
     with pytest.raises(StubActiveError):
         require_no_stubs()
@@ -286,19 +290,6 @@ def test_exact_only_removes_censored_observations() -> None:
         10.0,
         30.0,
     ]
-
-
-def test_constant_curve_predicts_mean() -> None:
-    """The constant stub family predicts the training mean.
-
-    Hand-worked: y = [10, 20, 30], mean = 20.
-    predict(anything) = 20, slope(anything) = 0.
-    """
-    begin_stub_run()
-    family = FAMILIES["constant"]
-    fitted = family.fit([1.0, 2.0, 3.0], [10.0, 20.0, 30.0])
-    assert fitted.predict(99.0) == pytest.approx(20.0)
-    assert fitted.slope(99.0) == pytest.approx(0.0)
 
 
 def test_raw_target_is_identity() -> None:
