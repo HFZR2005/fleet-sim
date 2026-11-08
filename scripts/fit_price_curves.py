@@ -25,10 +25,12 @@ from fleet_sim.prices.dataset import (
     summarise,
 )
 from fleet_sim.prices.evaluation import (
+    Bracket,
     EvaluationReport,
     FitResult,
     ResidualSeries,
     Split,
+    bracket,
     comparison_table,
     evaluate,
     residuals,
@@ -108,7 +110,7 @@ def _compare(config: CalibrationConfig) -> None:
             fig = plot_price_vs_residual(selection, fitted, target, title=model_name)
             save_figure(fig, output_dir / f"scatter_{model_name.replace('/', '_')}")
 
-    report = EvaluationReport(results=all_results)
+    report = EvaluationReport(results=all_results, brackets=_brackets(config, folds))
     save_figure(plot_evaluation_summary(report), output_dir / "comparison")
     (output_dir / "evaluation.json").write_text(
         report.model_dump_json(indent=2) + "\n", encoding="utf-8"
@@ -123,6 +125,33 @@ def _compare(config: CalibrationConfig) -> None:
         print("\nSTUB  Active stubs:")
         for s in stubs:
             print(f"  STUB  {s}")
+
+
+def _brackets(config: CalibrationConfig, folds: list[Fold]) -> list[Bracket]:
+    """Each family fitted to each training year alone, three ways.
+
+    A year fitted alone doesn't depend on pooling, so a target is skipped
+    when an earlier one uses the same transform (``raw_per_year`` after
+    ``raw_pooled``); rows carry the first target's name.
+    """
+    brackets: list[Bracket] = []
+    transforms: set[type] = set()
+    for target_name in config.models.targets:
+        target = TARGETS[target_name]
+        if type(target) in transforms:
+            continue
+        transforms.add(type(target))
+        for family_name in config.models.families:
+            for fold in folds:
+                brackets += bracket(
+                    FAMILIES[family_name],
+                    fold.test,
+                    target,
+                    model_name=f"{target_name}/{family_name}",
+                    curve_family=family_name,
+                    target_name=target_name,
+                )
+    return brackets
 
 
 def _splits(

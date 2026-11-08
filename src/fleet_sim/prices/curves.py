@@ -43,7 +43,12 @@ _Curve = Callable[[_Array, _Array], _Array]
 
 
 class FittedCurve(Protocol):
-    """A curve that has been fit to data."""
+    """A curve that has been fit to data, with its noise scale σ."""
+
+    @property
+    def sigma(self) -> float:
+        """Standard deviation of y about the curve (ADR-0003)."""
+        ...
 
     def predict(self, r_gw: float) -> float:
         """Predicted value at residual load ``r_gw``."""

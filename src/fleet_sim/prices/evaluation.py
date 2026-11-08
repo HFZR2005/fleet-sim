@@ -8,7 +8,10 @@ anchoring.
 
 Every error is in £/MWh, whatever the target: each prediction is turned
 back into a price with ``Target.to_price``.  Censored slots have no
-exact price, so they are left out of every error.
+exact price, so they are left out of every error.  They count instead
+through the censored log-likelihood and the hit rate.  ``bracket`` fits
+one year three ways to show how much the treatment of censored slots
+moves a curve.
 
 See ``docs/formulation.md``, Price curves, Evaluation.
 """
@@ -26,7 +29,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
-from fleet_sim.prices.curves import FittedCurve
+from fleet_sim.prices.curves import FittedCurve, PriceCurve, censored_log_likelihood
 from fleet_sim.prices.dataset import PriceDataset, PriceObservation
 from fleet_sim.prices.fleet_weights import FleetCharging
 from fleet_sim.prices.targets import Target
@@ -43,6 +46,7 @@ _SEASONS = {
 _GRID_POINTS = 200
 
 Split = Literal["held-out", "in-sample"]
+BracketMethod = Literal["dropped", "lower_bound", "censored"]
 
 
 class WeightedSlope(BaseModel):
@@ -84,7 +88,9 @@ class FitResult(BaseModel):
     ``split`` is ``held-out`` when the curve was fitted to other years,
     and ``in-sample`` when it was fitted to this year (per-year targets).
     RMSEs are over exact slots only; seasons are DJF, MAM, JJA, SON and
-    hours are Europe/London clock hours.
+    hours are Europe/London clock hours.  ``log_likelihood_per_slot`` is
+    over every slot, in target units, so it compares families of one
+    target but not targets.  ``hit_rate`` is None with no censored slot.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -95,6 +101,7 @@ class FitResult(BaseModel):
     year: int
     split: Split
     exact_slots: int
+    censored_slots: int
     rmse_gbp_per_mwh: float
     rmse_by_season_gbp_per_mwh: dict[str, float]
     rmse_by_hour_gbp_per_mwh: dict[int, float]
@@ -103,14 +110,40 @@ class FitResult(BaseModel):
     charging: WeightedSlope
     discharging: WeightedSlope
     sanity: SlopeSanity
+    log_likelihood_per_slot: float
+    hit_rate: float | None
+
+
+class Bracket(BaseModel):
+    """One family fitted to one year by one treatment of censored slots.
+
+    ``dropped`` fits the exact slots only, ``lower_bound`` takes each
+    censored slot as exactly its lower bound, and ``censored`` uses the
+    censored likelihood.  ``slope_at_r95`` is h′ at ``r95_gw``, the 95th
+    percentile of the year's R, in target units per GW.  ``parameters``
+    are the fit's scalar fields, σ included.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model_name: str
+    curve_family: str
+    target_name: str
+    year: int
+    method: BracketMethod
+    censored_slots: int
+    r95_gw: float
+    slope_at_r95: float
+    parameters: dict[str, float]
 
 
 class EvaluationReport(BaseModel):
-    """Comparison of all fitted models."""
+    """Comparison of all fitted models, and their censoring brackets."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     results: list[FitResult]
+    brackets: list[Bracket] = []
 
 
 class SlotResidual(BaseModel):
@@ -160,6 +193,12 @@ def evaluate(
     the mean price slope Σ w_t·k_t·h′(R_t) / Σ w_t over every test slot,
     censored ones included: the slope needs no price.
 
+    Censored slots: the mean censored log-likelihood ℓ/n over every
+    test slot (the fitting objective of ``censored_log_likelihood``, with
+    the fit's σ), and the hit rate, the share of censored slots with
+    l_t ≤ h(R_t) ≤ u_t.  Every target is increasing in π, so that is the
+    same as the predicted price lying in the slot's price bounds.
+
     ``train_data`` sets the range of R for the sanity checks.
     See ``docs/formulation.md``, Price curves, Evaluation.
     """
@@ -199,6 +238,17 @@ def evaluate(
             f"{years[0]} has no consecutive exact slots for the slope check"
         )
 
+    fitted_y = [fitted.predict(o.residual_load_gw) for o in observations]
+    bounds = [target.to_target_bounds(o) for o in observations]
+    lower = [b[0] for b in bounds]
+    upper = [b[1] for b in bounds]
+    log_likelihood = censored_log_likelihood(fitted_y, lower, upper, fitted.sigma)
+    hits = [
+        lo <= h <= hi
+        for h, lo, hi, o in zip(fitted_y, lower, upper, observations, strict=True)
+        if o.censored
+    ]
+
     net = charging.by_slot()
     return FitResult(
         model_name=model_name,
@@ -207,6 +257,7 @@ def evaluate(
         year=years[0],
         split=split,
         exact_slots=len(exact),
+        censored_slots=len(hits),
         rmse_gbp_per_mwh=_rmse(errors),
         rmse_by_season_gbp_per_mwh={k: _rmse(v) for k, v in sorted(by_season.items())},
         rmse_by_hour_gbp_per_mwh={k: _rmse(v) for k, v in sorted(by_hour.items())},
@@ -215,7 +266,59 @@ def evaluate(
         charging=_weighted(fitted, target, observations, pairs, net, sign=1.0),
         discharging=_weighted(fitted, target, observations, pairs, net, sign=-1.0),
         sanity=_sanity(fitted, train_data),
+        log_likelihood_per_slot=log_likelihood / len(observations),
+        hit_rate=sum(hits) / len(hits) if hits else None,
     )
+
+
+def bracket(
+    family: PriceCurve,
+    data: PriceDataset,
+    target: Target,
+    *,
+    model_name: str,
+    curve_family: str,
+    target_name: str,
+) -> list[Bracket]:
+    """Fit ``family`` to ``data``, one year, three ways (see ``Bracket``).
+
+    ``dropped`` fits the exact slots, ``lower_bound`` fits (Rₜ, lₜ) with
+    every slot exact, and ``censored`` fits the bounds [lₜ, uₜ].  The
+    slope is read at R95, the 95th percentile of the year's R, where
+    most censored slots are.  See ``docs/formulation.md``, Price curves,
+    Evaluation.
+    """
+    years = data.years
+    if len(years) != 1:
+        raise ValueError(f"data must be a single year (got {years})")
+    loads = [o.residual_load_gw for o in data.observations]
+    lower = [target.to_target_bounds(o)[0] for o in data.observations]
+    upper = [target.to_target_bounds(o)[1] for o in data.observations]
+    exact = [i for i, o in enumerate(data.observations) if not o.censored]
+    fits: dict[BracketMethod, FittedCurve] = {
+        "dropped": family.fit(
+            [loads[i] for i in exact],
+            [lower[i] for i in exact],
+            [lower[i] for i in exact],
+        ),
+        "lower_bound": family.fit(loads, lower, lower),
+        "censored": family.fit(loads, lower, upper),
+    }
+    r95 = float(np.percentile(loads, 95))
+    return [
+        Bracket(
+            model_name=model_name,
+            curve_family=curve_family,
+            target_name=target_name,
+            year=years[0],
+            method=method,
+            censored_slots=len(loads) - len(exact),
+            r95_gw=r95,
+            slope_at_r95=fitted.slope(r95),
+            parameters=_parameters(fitted),
+        )
+        for method, fitted in fits.items()
+    ]
 
 
 def residuals(
@@ -252,15 +355,19 @@ def comparison_table(report: EvaluationReport) -> str:
         (
             "RMSEs in £/MWh over exact slots; slopes in £/MWh per GW, weighted "
             "by the fleet's battery power; min slope in target units per GW "
-            "over the training range of R (⚠ when negative)."
+            "over the training range of R (⚠ when negative).  Log-lik/slot is "
+            "the censored log-likelihood per slot, in target units: compare it "
+            "between families of one target only.  Hit rate is the share of "
+            "censored slots whose prediction lies within their bounds."
         ),
         "",
         (
-            "| Model | Year | Split | RMSE | DJF | MAM | JJA | SON | Slope RMSE "
-            "| Charging slope RMSE | Discharging slope RMSE "
-            "| Charging slope | Discharging slope | Min slope |"
+            "| Model | Year | Split | RMSE (exact) | DJF | MAM | JJA | SON "
+            "| Slope RMSE | Charging slope RMSE | Discharging slope RMSE "
+            "| Charging slope | Discharging slope | Min slope "
+            "| Censored | Log-lik/slot | Hit rate |"
         ),
-        "| --- | ---: | --- |" + " ---: |" * 11,
+        "| --- | ---: | --- |" + " ---: |" * 14,
     ]
     for r in report.results:
         seasons = [
@@ -283,6 +390,9 @@ def comparison_table(report: EvaluationReport) -> str:
                     _cell(r.charging.mean_slope_gbp_per_mwh_per_gw),
                     _cell(r.discharging.mean_slope_gbp_per_mwh_per_gw),
                     f"{r.sanity.min_slope:.4g}{flag}",
+                    str(r.censored_slots),
+                    _cell(r.log_likelihood_per_slot),
+                    _cell(r.hit_rate),
                 ]
             )
             + " |"
@@ -308,7 +418,44 @@ def comparison_table(report: EvaluationReport) -> str:
         lines.append(
             f"| {target_name} | {year} | {_cell(charging)} | {_cell(discharging)} |"
         )
+    lines += _bracket_tables(report.brackets)
     return "\n".join(lines) + "\n"
+
+
+def _bracket_tables(brackets: list[Bracket]) -> list[str]:
+    """2021 alone, then the other years: slope at R95 and parameters."""
+    if not brackets:
+        return []
+    lines = [
+        "",
+        "## Censoring brackets",
+        "",
+        (
+            "Each year fitted alone, three ways: censored slots dropped, set to "
+            "their lower bound, or used as bounds.  Slope h′ at the year's 95th "
+            "percentile of R, in target units per GW."
+        ),
+    ]
+    for title, rows in (
+        ("2021", [b for b in brackets if b.year == 2021]),
+        ("Other years", [b for b in brackets if b.year != 2021]),
+    ):
+        if not rows:
+            continue
+        lines += [
+            "",
+            f"### {title}",
+            "",
+            "| Model | Year | Censored | Method | R95 (GW) | Slope at R95 | Parameters |",
+            "| --- | ---: | ---: | --- | ---: | ---: | --- |",
+        ]
+        for b in rows:
+            parameters = ", ".join(f"{k}={v:.4g}" for k, v in b.parameters.items())
+            lines.append(
+                f"| {b.model_name} | {b.year} | {b.censored_slots} | {b.method} "
+                f"| {b.r95_gw:.3g} | {b.slope_at_r95:.4g} | {parameters} |"
+            )
+    return lines
 
 
 def _price(obs: PriceObservation) -> float:
@@ -359,6 +506,13 @@ def _weighted(
         slope_rmse_gbp_per_mwh=slope_rmse,
         mean_slope_gbp_per_mwh_per_gw=mean_slope,
     )
+
+
+def _parameters(fitted: FittedCurve) -> dict[str, float]:
+    """The fit's scalar fields; every fit model is a pydantic model."""
+    if not isinstance(fitted, BaseModel):
+        raise TypeError(f"expected a fit model, got {type(fitted).__name__}")
+    return {k: v for k, v in fitted.model_dump().items() if isinstance(v, float)}
 
 
 def _sanity(fitted: FittedCurve, train_data: PriceDataset) -> SlopeSanity:
