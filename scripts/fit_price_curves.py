@@ -12,9 +12,11 @@ import json
 import sys
 from pathlib import Path
 
+from fleet_sim.data.agile_history import HistoricalAgileSource
 from fleet_sim.prices.config import CalibrationConfig, load_config
 from fleet_sim.prices.curves import FAMILIES, FittedCurve, PriceCurve
 from fleet_sim.prices.dataset import (
+    Fold,
     PriceDataset,
     build_dataset,
     final_test_split,
@@ -22,8 +24,21 @@ from fleet_sim.prices.dataset import (
     selection_folds,
     summarise,
 )
-from fleet_sim.prices.evaluation import EvaluationReport, FitResult, evaluate
+from fleet_sim.prices.evaluation import (
+    EvaluationReport,
+    FitResult,
+    ResidualSeries,
+    Split,
+    comparison_table,
+    evaluate,
+    residuals,
+)
 from fleet_sim.prices.figures import plot_evaluation_summary, plot_price_vs_residual
+from fleet_sim.prices.fleet_weights import (
+    FleetCharging,
+    fleet_charging,
+    uncoordinated,
+)
 from fleet_sim.prices.targets import TARGETS, Target
 from fleet_sim.stubs import (
     StubActiveError,
@@ -35,6 +50,8 @@ from fleet_sim.viz.save import save_figure
 
 _ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_CONFIG = _ROOT / "calibration" / "price_curves.toml"
+_SCENARIOS = _ROOT / "scenarios"
+_HOUSEHOLDS = _ROOT / ".cache" / "lcl" / "LCL-FullData.zip"
 
 
 def main() -> None:
@@ -50,56 +67,129 @@ def main() -> None:
 
 
 def _compare(config: CalibrationConfig) -> None:
-    """Fit every (family, target) model on each leave-one-year-out fold.
+    """Fit and score every (family, target) model on the training years.
 
-    Only the training years are read; the final-test year is left out.
+    Pooled targets are fitted on all but one year and scored on that
+    year (leave-one-year-out).  Per-year targets are fitted to each year
+    on its own and scored on the same year: a curve for one year has no
+    other year to predict.  Only the training years are read; the
+    final-test year is left out.
     """
     begin_stub_run()
     dataset = _load_dataset(config)
     selection = selection_data(dataset, config.splits)
     folds = selection_folds(dataset, config.splits)
+    charging = _fleet_charging(config, selection)
 
     output_dir = Path(config.output.results_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    results_by_year: dict[int, list[FitResult]] = {f.held_out_year: [] for f in folds}
     all_results: list[FitResult] = []
     for family_name in config.models.families:
         family = FAMILIES[family_name]
         for target_name in config.models.targets:
             target = TARGETS[target_name]
             model_name = f"{target_name}/{family_name}"
-            for fold in folds:
+            for train, test, split in _splits(target, folds):
                 fit_result, _fitted = _fit_and_evaluate(
-                    fold.train,
-                    fold.test,
+                    train,
+                    test,
                     family_name,
                     target_name,
                     family,
                     target,
                     model_name,
+                    charging,
+                    split,
                 )
-                results_by_year[fold.held_out_year].append(fit_result)
                 all_results.append(fit_result)
 
             fitted = _fit(family, target, selection)
             fig = plot_price_vs_residual(selection, fitted, target, title=model_name)
             save_figure(fig, output_dir / f"scatter_{model_name.replace('/', '_')}")
 
-    save_figure(
-        plot_evaluation_summary(EvaluationReport(results=all_results)),
-        output_dir / "comparison",
+    report = EvaluationReport(results=all_results)
+    save_figure(plot_evaluation_summary(report), output_dir / "comparison")
+    (output_dir / "evaluation.json").write_text(
+        report.model_dump_json(indent=2) + "\n", encoding="utf-8"
     )
-
-    for year, results in results_by_year.items():
-        print(f"\nHeld out {year}")
-        _print_report(EvaluationReport(results=results))
+    table = comparison_table(report)
+    (output_dir / "comparison.md").write_text(table, encoding="utf-8")
+    print(table)
+    _write_residuals(config, selection, folds, output_dir)
 
     stubs = active_stubs()
     if stubs:
         print("\nSTUB  Active stubs:")
         for s in stubs:
             print(f"  STUB  {s}")
+
+
+def _splits(
+    target: Target, folds: list[Fold]
+) -> list[tuple[PriceDataset, PriceDataset, Split]]:
+    """``(train, test, split)`` for each year a target is scored on."""
+    if target.per_year:
+        return [(fold.test, fold.test, "in-sample") for fold in folds]
+    return [(fold.train, fold.test, "held-out") for fold in folds]
+
+
+def _fleet_charging(config: CalibrationConfig, data: PriceDataset) -> FleetCharging:
+    """The weighting scenario's net battery power over the years of ``data``.
+
+    Runs from the first to the last day of ``data``, at the Agile prices
+    of those days.  The run is cached under the data cache directory.
+    """
+    days = [obs.settlement_start.date() for obs in data.observations]
+    start, end = max(min(days), config.data.start), max(days)
+    cache_dir = Path(config.data.cache_dir)
+    scenario = _SCENARIOS / f"{config.evaluation.weight_by_fleet_schedule}.toml"
+    print(f"Fleet weights: {scenario.name}, {start} to {end}")
+    charging = fleet_charging(
+        scenario,
+        start,
+        end,
+        price_source=HistoricalAgileSource(cache_dir=cache_dir),
+        cache_dir=cache_dir,
+        simulate=uncoordinated(_HOUSEHOLDS),
+    )
+    print(
+        f"  {len(charging.slot_start_utc)} slots, "
+        f"{len(charging.skipped_days)} days skipped\n"
+    )
+    return charging
+
+
+def _write_residuals(
+    config: CalibrationConfig,
+    selection: PriceDataset,
+    folds: list[Fold],
+    output_dir: Path,
+) -> None:
+    """Residuals on the training years for each model named in ``[chosen]``.
+
+    A per-year model is fitted to each year and its residuals joined.
+    """
+    chosen = [m for m in (config.chosen.main, config.chosen.robustness) if m]
+    if not chosen:
+        print("\nNo model in [chosen] yet, so no residuals written.")
+        return
+    for model_name in chosen:
+        target_name, family_name = _parse_model(model_name)
+        target = TARGETS[target_name]
+        family = FAMILIES[family_name]
+        years = [fold.test for fold in folds] if target.per_year else [selection]
+        slots = [
+            slot
+            for data in years
+            for slot in residuals(_fit(family, target, data), data, target)
+        ]
+        path = output_dir / f"residuals_{target_name}_{family_name}.json"
+        path.write_text(
+            ResidualSeries(model_name=model_name, slots=slots).model_dump_json() + "\n",
+            encoding="utf-8",
+        )
+        print(f"Residuals for {model_name} written to {path}")
 
 
 def _finalise(config: CalibrationConfig) -> None:
@@ -111,18 +201,23 @@ def _finalise(config: CalibrationConfig) -> None:
     train_data, test_data = final_test_split(dataset, config.splits)
 
     chosen = config.chosen.main
-    parts = chosen.split("/")
-    if len(parts) != 2:
-        raise ValueError(f"[chosen] main must be 'target/family' (got {chosen!r})")
-    target_name, family_name = parts
+    target_name, family_name = _parse_model(chosen)
     family = FAMILIES[family_name]
     target = TARGETS[target_name]
 
     fit_result, _fitted = _fit_and_evaluate(
-        train_data, test_data, family_name, target_name, family, target, chosen
+        train_data,
+        test_data,
+        family_name,
+        target_name,
+        family,
+        target,
+        chosen,
+        _fleet_charging(config, test_data),
+        "held-out",
     )
 
-    _print_report(EvaluationReport(results=[fit_result]))
+    print(comparison_table(EvaluationReport(results=[fit_result])))
 
     try:
         require_no_stubs()
@@ -140,6 +235,14 @@ def _finalise(config: CalibrationConfig) -> None:
         encoding="utf-8",
     )
     print(f"\nParameters written to {params_path}")
+
+
+def _parse_model(model_name: str) -> tuple[str, str]:
+    """``(target, family)`` from a ``target/family`` model name."""
+    parts = model_name.split("/")
+    if len(parts) != 2:
+        raise ValueError(f"model must be 'target/family' (got {model_name!r})")
+    return parts[0], parts[1]
 
 
 def _load_dataset(config: CalibrationConfig) -> PriceDataset:
@@ -160,6 +263,8 @@ def _fit_and_evaluate(
     family: PriceCurve,
     target: Target,
     model_name: str,
+    charging: FleetCharging,
+    split: Split,
 ) -> tuple[FitResult, FittedCurve]:
     """Fit one model on ``train_data`` and score it on ``test_data``."""
     fitted = _fit(family, target, train_data)
@@ -168,9 +273,11 @@ def _fit_and_evaluate(
         train_data,
         test_data,
         target,
+        charging,
         model_name=model_name,
         curve_family=family_name,
         target_name=target_name,
+        split=split,
     )
     return result, fitted
 
@@ -221,18 +328,6 @@ def _print_dataset(dataset: PriceDataset) -> None:
 
 def _spread(mean: float, low: float, high: float) -> str:
     return f"{mean:.1f} [{low:.1f}, {high:.1f}]"
-
-
-def _print_report(report: EvaluationReport) -> None:
-    """Print the evaluation report as a simple table."""
-    header = f"{'Model':<30} {'Train RMSE':>12} {'Test RMSE':>12} {'Train R²':>10} {'Test R²':>10}"
-    print(header)
-    print("-" * len(header))
-    for r in report.results:
-        print(
-            f"{r.model_name:<30} {r.train_rmse:>12.4f} {r.test_rmse:>12.4f} "
-            f"{r.train_r2:>10.4f} {r.test_r2:>10.4f}"
-        )
 
 
 if __name__ == "__main__":

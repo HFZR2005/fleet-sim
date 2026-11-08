@@ -18,7 +18,7 @@ from fleet_sim.data.agile_formula import (
     is_peak,
     version_date_ranges,
 )
-from fleet_sim.data.agile_history import load_agile_rates
+from fleet_sim.data.agile_history import HistoricalAgileSource, load_agile_rates
 from fleet_sim.data.wholesale import invert_rates
 
 _VERSIONS = {v.product_code: v for v in AGILE_VERSIONS}
@@ -277,3 +277,27 @@ def test_invert_rates_converts_to_gbp_per_mwh_with_bounds_on_capped_slots(
     assert cap.capped
     assert cap.wholesale_gbp_per_mwh == pytest.approx(371.4)
     assert cap.wholesale_upper_gbp_per_mwh is None
+
+
+@pytest.mark.parametrize(("slots", "message"), [(48, None), (47, "missing 1 of 48")])
+def test_historical_source_serves_one_london_day(
+    tmp_path: Path, slots: int, message: str | None
+) -> None:
+    """15 June 2024 is BST, so the day starts at 23:00 UTC on the 14th.
+
+    Every slot falls in June under one product, so one month is fetched,
+    and each price is value_inc_vat.  A missing slot raises.
+    """
+    start = datetime(2024, 6, 14, 23, tzinfo=UTC)
+    stamps = [start + timedelta(minutes=30) * i for i in range(slots)]
+    page = _api_page(stamps, [float(i) for i in range(slots)])
+    source = HistoricalAgileSource(cache_dir=tmp_path, opener=lambda url: page)
+
+    if message is not None:
+        with pytest.raises(ValueError, match=message):
+            source.load(date(2024, 6, 15), "c")
+        return
+    series = source.load(date(2024, 6, 15), "c")
+    assert series.region == "C"
+    assert series.timestamps_utc == stamps
+    assert series.price_p_per_kwh == [round(i * 1.05, 6) for i in range(48)]

@@ -57,12 +57,12 @@ A separate pipeline calibrates price curves: the relationship between wholesale 
 
 ### Stages
 
-1. **Load.** Three data loaders in `fleet_sim/data/` provide wholesale prices (inverted from Agile), residual load, and marginal fuel cost. `build_dataset` in `prices/dataset.py` joins them on settlement period into `PriceObservation` records. It drops slots missing any input, and records per year how many each rule dropped. A slot whose Agile rate is capped is kept as a censored observation: its π is a lower bound, with an upper bound where one is known (the Q4 2022 EPG floor). `summarise` gives rows, censored rows, and the mean and range of π (exact slots only), R and k per year. Fitting doesn't use bounds yet, so `exact_only` removes censored slots once, in `scripts/fit_price_curves.py`, before anything is fitted or evaluated.
+1. **Load.** Three data loaders in `fleet_sim/data/` provide wholesale prices (inverted from Agile), residual load, and marginal fuel cost. `build_dataset` in `prices/dataset.py` joins them on settlement period into `PriceObservation` records. It drops slots missing any input, and records per year how many each rule dropped. A slot whose Agile rate is capped is kept as a censored observation: its π is a lower bound, with an upper bound where one is known (the Q4 2022 EPG floor). `summarise` gives rows, censored rows, and the mean and range of π (exact slots only), R and k per year. Censored slots stay in: fitting uses their bounds, and evaluation leaves them out of every error.
 2. **Split.** Splits are by whole year, because neighbouring half-hours are near-duplicates. `selection_folds` makes the leave-one-year-out folds for model selection, over the training years only. `final_test_split` is the only function that returns final-test rows; `compare` never calls it.
 3. **Transform.** A `Target` extracts the dependent variable from each observation. Raw targets use the wholesale price directly; the fuel-adjusted target divides it by fuel cost. A target also says whether to fit per year or pool all years.
-4. **Fit.** A `PriceCurve` fits `(residual_load, y)` data and returns a `FittedCurve` with `predict` and `slope` methods. No family knows about targets.
-5. **Evaluate.** `evaluate` scores the fitted curve on held-out data, producing a `FitResult` with RMSE and R² metrics.
-6. **Compare / Finalise.** `compare` runs all (family, target) models and writes a comparison table and figures. `finalise` refits the chosen model on training data, evaluates on the final-test year, and writes the parameters file — but only after `require_no_stubs()` confirms no stub ran.
+4. **Fit.** A `PriceCurve` fits residual load and bounds on `y` and returns a `FittedCurve` with `predict` and `slope` methods. No family knows about targets.
+5. **Evaluate.** `evaluate` scores a fitted curve on one year, producing a `FitResult`: RMSE overall, by season and by hour, the slope error between consecutive half-hours, and that slope error weighted by where a fleet charges and discharges. The weights come from `fleet_charging` in `prices/fleet_weights.py`, which runs the `[evaluation]` scenario over the training years at the Agile prices of those days (`HistoricalAgileSource`) and caches the run. Pooled targets are scored on each held-out year. Per-year targets are fitted to each year and scored on the same year, since a one-year curve has no other year to predict.
+6. **Compare / Finalise.** `compare` runs all (family, target) models and writes `evaluation.json`, the Markdown table from `comparison_table`, figures, and residuals for the models in `[chosen]`. `finalise` refits the chosen model on training data, evaluates on the final-test year, and writes the parameters file — but only after `require_no_stubs()` confirms no stub ran.
 
 A model is a (curve family, target) pair. The family does not know about targets, and no target knows about families.
 
@@ -76,8 +76,9 @@ A model is a (curve family, target) pair. The family does not know about targets
 | `Fold` | One leave-one-year-out split: held-out year, train and test datasets |
 | `YearSummary` | Rows, censored rows, and the mean and range of π (exact slots only), R and k for one year |
 | `FittedCurve` | Protocol: `predict(r_gw)` and `slope(r_gw)` |
-| `PriceCurve` | Protocol: `fit(r_gw, y) -> FittedCurve` |
+| `PriceCurve` | Protocol: `fit(r_gw, y_lower, y_upper) -> FittedCurve` |
 | `Target` | Protocol: `to_target(obs) -> y`, `to_price(y, obs) -> price`, `per_year` flag |
-| `FitResult` | Metrics for one model on one split |
+| `FitResult` | Metrics for one model on one year |
+| `FleetCharging` | A fleet's net battery power in each slot, for weighting slope errors |
 | `EvaluationReport` | Comparison of all fitted models |
 | `CalibrationConfig` | Validates `calibration/price_curves.toml` |
