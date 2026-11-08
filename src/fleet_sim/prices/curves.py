@@ -20,14 +20,16 @@ Price curves.
 
 from __future__ import annotations
 
+import bisect
+import itertools
+import math
 from collections.abc import Sequence
 from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import BaseModel, ConfigDict
-
-from fleet_sim.stubs import stub
+from pydantic import BaseModel, ConfigDict, model_validator
+from scipy.optimize import curve_fit, isotonic_regression
 
 
 class FittedCurve(Protocol):
@@ -182,38 +184,167 @@ class CubicOffset:
         return CubicOffsetFit(a0=a0, a1=a1, a3=a3)
 
 
-class ConstantFit:
-    """Fitted curve that predicts the training mean everywhere."""
+class ExponentialFit(BaseModel):
+    """Fitted exponential h(R) = α + β·e^{γR}.
 
-    def __init__(self, mean_y: float) -> None:
-        self._mean_y = mean_y
+    Slope: h'(R) = βγ·e^{γR}.  See ``docs/formulation.md``, Price curves.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    alpha: float
+    beta: float
+    gamma: float
 
     def predict(self, r_gw: float) -> float:
-        """Return the training mean regardless of ``r_gw``."""
-        _ = r_gw
-        return self._mean_y
+        """h(R) = α + β·e^{γR}."""
+        return self.alpha + self.beta * math.exp(self.gamma * r_gw)
 
     def slope(self, r_gw: float) -> float:
-        """Return zero: a constant has no slope."""
-        _ = r_gw
-        return 0.0
+        """h'(R) = βγ·e^{γR}."""
+        return self.beta * self.gamma * math.exp(self.gamma * r_gw)
 
 
-class ConstantCurve:
-    """Curve family that always predicts the training mean."""
+def _exponential(
+    r: NDArray[np.float64], alpha: float, beta: float, gamma: float
+) -> NDArray[np.float64]:
+    """α + β·e^{γR}, vectorised for ``curve_fit``."""
+    return alpha + beta * np.exp(gamma * r)
 
-    @stub("constant placeholder — replace with polynomial/piecewise families")
-    def fit(self, r_gw: Sequence[float], y: Sequence[float]) -> ConstantFit:
-        """Return a ``ConstantFit`` at the mean of ``y``."""
-        if not y:
-            raise ValueError("cannot fit with no observations")
-        mean = sum(y) / len(y)
-        return ConstantFit(mean)
+
+# Starting γ values, as multiples of 1 / (range of R): 21 log-spaced
+# magnitudes from 0.1 to 10, each with both signs.  γ = 0 is left out
+# because e^{γR} is then constant and collinear with α.
+_GAMMA_GRID_SCALED = np.concatenate(
+    [-np.logspace(-1.0, 1.0, 21), np.logspace(-1.0, 1.0, 21)]
+)
+
+
+class Exponential:
+    """Family h(R) = α + β·e^{γR}, fit by nonlinear least squares.
+
+    Minimises Σ (yᵢ − α − β·e^{γRᵢ})² with ``scipy.optimize.curve_fit``
+    (Levenberg–Marquardt), which is iterative and needs starting values.
+
+    Starting values: for fixed γ the model is linear in (α, β), so they
+    are solved exactly by least squares on the columns [1, e^{γR}].  This
+    is done for each γ = c / (max R − min R) with c on ±logspace(−1, 1, 21),
+    and the (α, β, γ) with the smallest sum of squared errors is the start.
+    See ``docs/formulation.md``, Price curves.
+    """
+
+    def fit(self, r_gw: Sequence[float], y: Sequence[float]) -> ExponentialFit:
+        """Return the least-squares ``ExponentialFit``."""
+        r, y_arr = _as_arrays(r_gw, y)
+        if np.unique(r).size < 3:
+            raise ValueError(
+                "Exponential needs at least 3 distinct r_gw values to be fit"
+            )
+        start = self._starting_values(r, y_arr)
+        try:
+            params, _covariance = curve_fit(_exponential, r, y_arr, p0=start)
+        except RuntimeError as error:
+            raise ValueError(f"Exponential fit did not converge: {error}") from error
+        alpha, beta, gamma = (float(p) for p in params)
+        return ExponentialFit(alpha=alpha, beta=beta, gamma=gamma)
+
+    @staticmethod
+    def _starting_values(
+        r: NDArray[np.float64], y: NDArray[np.float64]
+    ) -> tuple[float, float, float]:
+        """Best (α, β, γ) over the γ grid, with (α, β) solved exactly."""
+        span = float(r.max() - r.min())
+        best: tuple[float, float, float] | None = None
+        best_sse = math.inf
+        for gamma in _GAMMA_GRID_SCALED / span:
+            design = np.column_stack([np.ones_like(r), np.exp(gamma * r)])
+            coefficients, _residuals, _rank, _singular = np.linalg.lstsq(design, y)
+            sse = float(np.sum((y - design @ coefficients) ** 2))
+            if sse < best_sse:
+                best_sse = sse
+                best = (float(coefficients[0]), float(coefficients[1]), float(gamma))
+        if best is None:
+            raise ValueError("Exponential found no finite starting values")
+        return best
+
+
+class IsotonicFit(BaseModel):
+    """Fitted non-decreasing curve, linear between knots.
+
+    ``predict`` interpolates linearly between the knots (Rⱼ, vⱼ) and is
+    flat beyond the first and last knot.  ``slope`` is the finite
+    difference over the segment containing R,
+    (vⱼ₊₁ − vⱼ) / (Rⱼ₊₁ − Rⱼ) for Rⱼ ≤ R < Rⱼ₊₁, and 0 outside the
+    knots.  See ``docs/formulation.md``, Price curves.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    knots_r_gw: tuple[float, ...]
+    values: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _check_knots(self) -> IsotonicFit:
+        if len(self.knots_r_gw) != len(self.values):
+            raise ValueError(
+                "knots_r_gw and values must have the same length "
+                f"(got {len(self.knots_r_gw)} and {len(self.values)})"
+            )
+        if not self.knots_r_gw:
+            raise ValueError("an isotonic fit needs at least one knot")
+        if any(b <= a for a, b in itertools.pairwise(self.knots_r_gw)):
+            raise ValueError("knots_r_gw must be strictly increasing")
+        if any(b < a for a, b in itertools.pairwise(self.values)):
+            raise ValueError("values must be non-decreasing")
+        return self
+
+    def predict(self, r_gw: float) -> float:
+        """Linear interpolation between knots, flat outside them."""
+        return float(np.interp(r_gw, self.knots_r_gw, self.values))
+
+    def slope(self, r_gw: float) -> float:
+        """(vⱼ₊₁ − vⱼ) / (Rⱼ₊₁ − Rⱼ) on the segment containing ``r_gw``."""
+        j = bisect.bisect_right(self.knots_r_gw, r_gw) - 1
+        if j < 0 or j >= len(self.knots_r_gw) - 1:
+            return 0.0
+        rise = self.values[j + 1] - self.values[j]
+        run = self.knots_r_gw[j + 1] - self.knots_r_gw[j]
+        return rise / run
+
+
+class Isotonic:
+    """Best non-decreasing fit, by least squares.
+
+    Minimises Σ (yᵢ − h(Rᵢ))² over all h with h(Rᵢ) ≤ h(Rⱼ) whenever
+    Rᵢ ≤ Rⱼ, using ``scipy.optimize.isotonic_regression`` (pool adjacent
+    violators).  Tied Rᵢ are first merged into their mean y, weighted by
+    count.  The solution is constant on blocks of neighbouring R; each
+    block becomes one knot at its count-weighted mean R and its fitted
+    value, and ``IsotonicFit`` interpolates between knots.
+    See ``docs/formulation.md``, Price curves.
+    """
+
+    def fit(self, r_gw: Sequence[float], y: Sequence[float]) -> IsotonicFit:
+        """Return the least-squares ``IsotonicFit``."""
+        r, y_arr = _as_arrays(r_gw, y)
+        r_unique, inverse, counts = np.unique(
+            r, return_inverse=True, return_counts=True
+        )
+        y_mean = np.bincount(inverse, weights=y_arr) / counts
+        result = isotonic_regression(y_mean, weights=counts)
+        knots: list[float] = []
+        values: list[float] = []
+        for start, end in itertools.pairwise(result.blocks):
+            block_counts = counts[start:end]
+            knots.append(float(np.average(r_unique[start:end], weights=block_counts)))
+            values.append(float(result.x[start]))
+        return IsotonicFit(knots_r_gw=tuple(knots), values=tuple(values))
 
 
 FAMILIES: dict[str, PriceCurve] = {
-    "constant": ConstantCurve(),
     "cubic": Cubic(),
     "signed_quadratic": SignedQuadratic(),
     "cubic_offset": CubicOffset(),
+    "exponential": Exponential(),
+    "isotonic": Isotonic(),
 }
