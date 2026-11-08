@@ -2,7 +2,10 @@
 
 A ``Target`` turns a ``PriceObservation`` into a scalar ``y`` that a
 curve family fits against residual load, and reverses the transform to
-recover the price.  No target knows about curve families.
+recover the price.  For fitting it gives bounds on ``y``: a censored
+slot's price is known only as an interval, and every target is
+increasing in π, so it maps the price bounds to bounds on ``y``.  No
+target knows about curve families.
 
 ``per_year`` controls whether the fitting loop fits one curve per year
 or pools all years together.
@@ -12,6 +15,7 @@ See ``docs/architecture.md``, Price curves.
 
 from __future__ import annotations
 
+import math
 from typing import Protocol
 
 from fleet_sim.prices.dataset import PriceObservation
@@ -27,6 +31,10 @@ class Target(Protocol):
 
     def to_target(self, obs: PriceObservation) -> float:
         """Extract the value the curve family will fit."""
+        ...
+
+    def to_target_bounds(self, obs: PriceObservation) -> tuple[float, float]:
+        """``(y_lower, y_upper)``: equal for an exact slot, upper ``inf`` if unknown."""
         ...
 
     def to_price(self, y: float, obs: PriceObservation) -> float:
@@ -47,6 +55,10 @@ class RawTarget:
     def to_target(self, obs: PriceObservation) -> float:
         return obs.wholesale_price_gbp_per_mwh
 
+    def to_target_bounds(self, obs: PriceObservation) -> tuple[float, float]:
+        """The price bounds unchanged."""
+        return _price_bounds(obs)
+
     def to_price(self, y: float, obs: PriceObservation) -> float:
         _ = obs
         return y
@@ -57,7 +69,9 @@ class FuelAdjustedTarget:
 
     The model is π = k·h(R) + ε, so dividing by the fuel cost k leaves
     the dimensionless curve h(R) to fit.  k must be positive, or y is
-    undefined or flips sign.  See ``docs/formulation.md``, Price curves.
+    undefined or flips sign.  For k > 0, y is increasing in π, so price
+    bounds [l, u] map to [l / k, u / k], with ∞ / k = ∞.
+    See ``docs/formulation.md``, Price curves.
     """
 
     def __init__(self, *, per_year: bool = False) -> None:
@@ -71,9 +85,24 @@ class FuelAdjustedTarget:
         """y = π / k."""
         return obs.wholesale_price_gbp_per_mwh / _positive_fuel_cost(obs)
 
+    def to_target_bounds(self, obs: PriceObservation) -> tuple[float, float]:
+        """(l / k, u / k)."""
+        k = _positive_fuel_cost(obs)
+        lower, upper = _price_bounds(obs)
+        return lower / k, upper / k
+
     def to_price(self, y: float, obs: PriceObservation) -> float:
         """π = k·y."""
         return y * _positive_fuel_cost(obs)
+
+
+def _price_bounds(obs: PriceObservation) -> tuple[float, float]:
+    """``(lower, upper)`` on π: equal when exact, upper ``inf`` if unknown."""
+    lower = obs.wholesale_price_gbp_per_mwh
+    if not obs.censored:
+        return lower, lower
+    upper = obs.wholesale_upper_gbp_per_mwh
+    return lower, math.inf if upper is None else upper
 
 
 def _positive_fuel_cost(obs: PriceObservation) -> float:
