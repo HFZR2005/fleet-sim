@@ -35,3 +35,4 @@ Each home solves its own cheapest-charging problem. When many homes do this agai
 
 - [ADR-0001: Network as a price](decisions/0001-network-as-a-price.md) — why the network constraint reaches homes through a price adjustment, not a direct signal.
 - [ADR-0002: Price data from May 2021](decisions/0002-price-data-from-may-2021.md) — why the price-curve data starts when the UK ETS began, and what that gives up.
+- [ADR-0003: Constant-σ normal noise](decisions/0003-noise-model.md) — why price curves are fitted with one constant noise scale, and where the residuals disagree with it.
