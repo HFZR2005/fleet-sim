@@ -108,7 +108,11 @@ def _invert_one(
     version = best_version_for_date(stamp.date())
     peak = is_peak(stamp)
     wholesale_p, capped = invert_agile(
-        rate.value_exc_vat, region=region, peak=peak, version=version
+        rate.value_exc_vat,
+        region=region,
+        peak=peak,
+        version=version,
+        settlement_start=stamp,
     )
     return InvertedRate(
         settlement_start=stamp,

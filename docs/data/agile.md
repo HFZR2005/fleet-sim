@@ -46,6 +46,8 @@ half-hour starting at 18:30).  In UTC this is:
 To recover the wholesale price from a retail rate:
 
 1. Read `value_exc_vat` from the Octopus API.
+   Between 1 October 2022 and 30 June 2023, first undo the
+   [Energy Price Guarantee adjustment](#energy-price-guarantee).
 2. If `value_exc_vat ≥ cap − 0.1`: the slot is **capped**.  The
    wholesale price cannot be recovered; flag the slot and skip it.
 3. Otherwise:
@@ -84,11 +86,71 @@ inc VAT).  For dates before June 2022, only AGILE-18-02-21 is available
 
 Cap values for AGILE-18-02-21 (35 p) and AGILE-22-07-22 (55 p) are
 confirmed by observing the API return rates that cluster at exactly the
-expected `cap / 1.05` value.  The 78 p cap for AGILE-22-08-31 is from
-third-party reporting and has not been observed to bind in the data
-checked (prices in the available date range stayed below it).  The
+expected `cap / 1.05` value.  The 78 p cap for AGILE-22-08-31 is
+confirmed the same way: 886 region C rates in August–September 2022 sit
+at exactly 74.28 (the API truncates 78/1.05 = 74.2857 rather than rounding it).  The
 95.23 p cap for AGILE-23-12-06 and AGILE-24-10-01 is confirmed by
 observing rates at exactly 95.23 across multiple regions.
+
+## Energy Price Guarantee
+
+From 1 October 2022 to 30 June 2023 (UK local dates) the Energy Price
+Guarantee changed how Agile rates were billed.  Once the formula price
+went above a floor F, a per-quarter discount D was taken off, but the
+billed rate never went below F:
+
+```
+billed = formula                 if formula ≤ F
+billed = max(formula − D, F)     otherwise
+```
+
+Inversion therefore depends on where the billed rate sits:
+
+| Billed rate | Meaning | Treatment |
+|---|---|---|
+| below F | ordinary formula price | invert as usual |
+| at F (±0.001) | formula anywhere in [F, F + D] | **capped** |
+| above F, D known | formula − D | add D back, then the usual cap check |
+| above F, D unknown | formula − D | **capped** |
+
+Region C values, measured from AGILE-22-08-31:
+
+| Window | F (p/kWh exc VAT) | D (p/kWh exc VAT) |
+|---|---|---|
+| 1 Oct – 31 Dec 2022 | 34.0926 | 16.9983 |
+| 1 Jan – 31 Mar 2023 | 34.0926 | unknown |
+| 1 Apr – 30 Jun 2023 | 34.0926 | unknown |
+
+Adding D back makes the 78 p cap show up as 74.28 − 16.9983 = 57.2817.
+The usual cap check flags those slots once D is restored.
+
+### Evidence
+
+Outside the window every region C rate has at most two decimal places.
+Inside it, only the rates at or above F have four:
+
+| Quarter | At F | Above F | Last two of four decimals above F |
+|---|---|---|---|
+| Oct–Dec 2022 | 912 | 889 | all `17` |
+| Jan–Mar 2023 | 761 | 3 | all `98` |
+| Apr–Jun 2023 | 159 | 0 | — |
+
+- **D for Q4 2022.** A 2dp formula price minus 16.9983 always ends in
+  `17`, and the highest Q4 rate is 57.2817 = 74.28 − 16.9983, exactly
+  the AGILE-22-08-31 cap less D.  57.2817 appears on 303 slots from
+  2 October to 17 December 2022.
+- **F.** Rates cluster at 34.0926, and at 34.0927 from about
+  22 December 2022, presumably a rounding change.  The ±0.001 tolerance
+  covers both but doesn't catch a genuine 2dp rate such as 34.09 or 34.10.
+- **D for 2023.** Three slots are too few to pin D down, so above-floor
+  rates in 2023 are flagged as capped.
+- **Window.** The first 4dp rate is at 07:00 UTC on 1 October 2022, and
+  the last is on 29 June 2023.  The window runs over whole quarters to
+  match the EPG's quarterly discount.
+
+The EPG discount was set per region, so D and F are likely to differ by
+region, and only region C has been measured.  Inverting any other region inside
+the window raises an error rather than guessing.
 
 ## Regional parameters
 

@@ -11,6 +11,7 @@ import pytest
 from fleet_sim.data.agile_formula import (
     AGILE_VERSIONS,
     AgileVersion,
+    EpgAdjustment,
     apply_agile,
     best_version_for_date,
     invert_agile,
@@ -22,7 +23,10 @@ from fleet_sim.data.wholesale import invert_rates
 
 _VERSIONS = {v.product_code: v for v in AGILE_VERSIONS}
 _V18 = _VERSIONS["AGILE-18-02-21"]
+_V22 = _VERSIONS["AGILE-22-08-31"]
 _V24 = _VERSIONS["AGILE-24-10-01"]
+# A slot outside the Energy Price Guarantee window.
+_NO_EPG = datetime(2024, 6, 15, tzinfo=UTC)
 
 
 def _api_page(valid_from: list[datetime], exc: list[float]) -> bytes:
@@ -76,7 +80,9 @@ def test_invert_recovers_an_uncapped_wholesale_price(
 ) -> None:
     """apply then invert returns the input, for the extreme region multipliers."""
     exc, _ = apply_agile(5.0, region=region, peak=peak, version=version)
-    wholesale, capped = invert_agile(exc, region=region, peak=peak, version=version)
+    wholesale, capped = invert_agile(
+        exc, region=region, peak=peak, version=version, settlement_start=_NO_EPG
+    )
     assert wholesale == pytest.approx(5.0)
     assert not capped
 
@@ -94,8 +100,71 @@ def test_invert_recovers_an_uncapped_wholesale_price(
 def test_invert_flags_a_rate_at_the_cap(
     value_exc_vat: float, version: AgileVersion, expected: bool
 ) -> None:
-    _, capped = invert_agile(value_exc_vat, region="C", peak=False, version=version)
+    _, capped = invert_agile(
+        value_exc_vat,
+        region="C",
+        peak=False,
+        version=version,
+        settlement_start=_NO_EPG,
+    )
     assert capped is expected
+
+
+_EPG_Q4 = datetime(2022, 11, 1, 12, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("value_exc_vat", "stamp", "expected_wholesale", "expected_capped"),
+    [
+        # At the 34.0926 floor inside the window: censored.
+        (34.0926, _EPG_Q4, 34.0926 / 2, True),
+        # Same value before the window is an ordinary rate: 34.0926 / 2.
+        (34.0926, datetime(2022, 9, 15, 12, tzinfo=UTC), 34.0926 / 2, False),
+        # Rounding variant of the floor.
+        (34.0927, _EPG_Q4, 34.0927 / 2, True),
+        # Below the floor the formula is untouched: 30 / 2 = 15.
+        (30.0, _EPG_Q4, 15.0, False),
+        # Above the floor, add D back: (35.0017 + 16.9983) / 2 = 52 / 2 = 26.
+        (35.0017, _EPG_Q4, 26.0, False),
+        # 57.2817 + 16.9983 = 74.28 ≥ 74.29 − 0.1: the 78p cap binds.
+        (57.2817, _EPG_Q4, 74.28 / 2, True),
+        # Q1 2023 discount is unknown, so an above-floor rate can't be recovered.
+        (34.8798, datetime(2023, 2, 1, 12, tzinfo=UTC), 34.8798 / 2, True),
+    ],
+)
+def test_invert_undoes_the_epg_adjustment_in_region_c(
+    value_exc_vat: float,
+    stamp: datetime,
+    expected_wholesale: float,
+    expected_capped: bool,
+) -> None:
+    """Region C off-peak, multiplier 2.00, AGILE-22-08-31 (cap 74.29)."""
+    wholesale, capped = invert_agile(
+        value_exc_vat, region="C", peak=False, version=_V22, settlement_start=stamp
+    )
+    assert wholesale == pytest.approx(expected_wholesale)
+    assert capped is expected_capped
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "discount", "message"),
+    [
+        (date(2023, 1, 1), date(2022, 12, 31), 1.0, "start 2023-01-01 is after end"),
+        (date(2022, 10, 1), date(2022, 12, 31), 0.0, "discount must be positive"),
+    ],
+)
+def test_epg_adjustment_rejects_invalid_values(
+    start: date, end: date, discount: float, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        EpgAdjustment(start=start, end=end, discount_exc_vat_p_per_kwh=discount)
+
+
+def test_invert_rejects_other_regions_inside_the_epg_window() -> None:
+    with pytest.raises(ValueError, match="EPG adjustment for region 'A' is unknown"):
+        invert_agile(
+            20.0, region="A", peak=False, version=_V22, settlement_start=_EPG_Q4
+        )
 
 
 @pytest.mark.parametrize(
