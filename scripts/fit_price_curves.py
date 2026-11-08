@@ -17,6 +17,7 @@ from fleet_sim.prices.curves import FAMILIES, FittedCurve, PriceCurve
 from fleet_sim.prices.dataset import (
     PriceDataset,
     build_dataset,
+    exact_only,
     final_test_split,
     selection_data,
     selection_folds,
@@ -55,8 +56,7 @@ def _compare(config: CalibrationConfig) -> None:
     Only the training years are read; the final-test year is left out.
     """
     begin_stub_run()
-    dataset = build_dataset(config)
-    _print_dataset(dataset)
+    dataset = _load_dataset(config)
     selection = selection_data(dataset, config.splits)
     folds = selection_folds(dataset, config.splits)
 
@@ -108,8 +108,7 @@ def _finalise(config: CalibrationConfig) -> None:
     if not config.chosen.main:
         raise ValueError("[chosen] main is empty — run compare first and pick a model")
     begin_stub_run()
-    dataset = build_dataset(config)
-    _print_dataset(dataset)
+    dataset = _load_dataset(config)
     train_data, test_data = final_test_split(dataset, config.splits)
 
     chosen = config.chosen.main
@@ -142,6 +141,16 @@ def _finalise(config: CalibrationConfig) -> None:
         encoding="utf-8",
     )
     print(f"\nParameters written to {params_path}")
+
+
+def _load_dataset(config: CalibrationConfig) -> PriceDataset:
+    """Build and print the dataset, then keep exact slots for fitting.
+
+    Fitting doesn't use bounds yet, so censored slots are left out here.
+    """
+    dataset = build_dataset(config)
+    _print_dataset(dataset)
+    return exact_only(dataset)
 
 
 def _fit_and_evaluate(
@@ -177,16 +186,17 @@ def _fit(family: PriceCurve, target: Target, data: PriceDataset) -> FittedCurve:
 def _print_dataset(dataset: PriceDataset) -> None:
     """Print slots dropped per rule, then rows and the range of π, R, k per year."""
     print(
-        f"{'Year':<6} {'Expected':>9} {'Capped':>7} {'No π':>6} "
-        f"{'No R':>6} {'No k':>6} {'Kept':>7}"
+        f"{'Year':<6} {'Expected':>9} {'No π':>6} "
+        f"{'No R':>6} {'No k':>6} {'Kept':>7} {'Censored':>9}"
     )
     for d in dataset.drops:
         print(
-            f"{d.year:<6} {d.expected_slots:>9} {d.capped:>7} {d.missing_price:>6} "
-            f"{d.missing_residual_load:>6} {d.missing_fuel_cost:>6} {d.kept:>7}"
+            f"{d.year:<6} {d.expected_slots:>9} {d.missing_price:>6} "
+            f"{d.missing_residual_load:>6} {d.missing_fuel_cost:>6} {d.kept:>7} "
+            f"{d.censored:>9}"
         )
     print(
-        f"\n{'Year':<6} {'Rows':>7} "
+        f"\n{'Year':<6} {'Rows':>7} {'Censored':>9} "
         f"{'π mean [min, max] £/MWh':>28} "
         f"{'R mean [min, max] GW':>26} "
         f"{'k mean [min, max] £/MWh':>28}"
@@ -203,7 +213,10 @@ def _print_dataset(dataset: PriceDataset) -> None:
             s.fuel_cost_min_gbp_per_mwh,
             s.fuel_cost_max_gbp_per_mwh,
         )
-        print(f"{s.year:<6} {s.rows:>7} {price:>28} {load:>26} {cost:>28}")
+        print(
+            f"{s.year:<6} {s.rows:>7} {s.censored_rows:>9} "
+            f"{price:>28} {load:>26} {cost:>28}"
+        )
     print()
 
 

@@ -49,11 +49,18 @@ To recover the wholesale price from a retail rate:
    Between 1 October 2022 and 30 June 2023, first undo the
    [Energy Price Guarantee adjustment](#energy-price-guarantee).
 2. If `value_exc_vat ≥ cap − 0.1`: the slot is **capped**.  The
-   wholesale price cannot be recovered; flag the slot and skip it.
-3. Otherwise:
+   wholesale price cannot be recovered exactly.  It is at least the
+   value the cap gives, so the slot is kept as a **censored** observation
+   with that value as a lower bound and no upper bound.
+3. Invert the rate (or each bound):
    - Off-peak: `wholesale_p = value_exc_vat / multiplier`
    - Peak: `wholesale_p = (value_exc_vat − peak_adder) / multiplier`
 4. Convert: `wholesale_gbp_per_mwh = wholesale_p × 10`
+
+`build_dataset` keeps censored slots, and `YearDrops` counts them per
+year as censored (kept), not as drops.  Fitting doesn't use bounds yet,
+so `exact_only` removes them before fitting; `load_wholesale_prices`
+still drops them.
 
 The 0.1 p/kWh tolerance on cap detection accounts for the API rounding
 `value_exc_vat` to two decimal places (e.g. the true cap 35/1.05 =
@@ -68,7 +75,7 @@ uncapped slots, all versions return identical `value_exc_vat` values —
 they share the same formula parameters, differing only in cap.
 
 The loader selects the version with the highest cap for each date to
-minimise the number of capped (lost) slots.
+minimise the number of capped (censored) slots.
 
 | Product | Cap exc VAT (p/kWh) | Cap inc VAT (p/kWh) | Data from |
 |---|---|---|---|
@@ -109,9 +116,9 @@ Inversion therefore depends on where the billed rate sits:
 | Billed rate | Meaning | Treatment |
 |---|---|---|
 | below F | ordinary formula price | invert as usual |
-| at F (±0.001) | formula anywhere in [F, F + D] | **capped** |
+| at F (±0.001) | formula anywhere in [F, F + D] | **capped**: bounds [F, F + D], or [F, ∞) when D is unknown |
 | above F, D known | formula − D | add D back, then the usual cap check |
-| above F, D unknown | formula − D | **capped** |
+| above F, D unknown | formula − D | **capped**: formula > billed, so bounds [billed, ∞) |
 
 Region C values, measured from AGILE-22-08-31:
 
@@ -123,6 +130,11 @@ Region C values, measured from AGILE-22-08-31:
 
 Adding D back makes the 78 p cap show up as 74.28 − 16.9983 = 57.2817.
 The usual cap check flags those slots once D is restored.
+
+For example, a region C off-peak slot at F in Q4 2022 has wholesale
+bounds [34.0926 / 2 × 10, (34.0926 + 16.9983) / 2 × 10] =
+[170.46, 255.45] £/MWh.  The lower bound uses the billed rate, so the
+34.0927 rounding variant gives a lower bound 0.0005 £/MWh higher.
 
 ### Evidence
 
@@ -143,7 +155,7 @@ Inside it, only the rates at or above F have four:
   22 December 2022, presumably a rounding change.  The ±0.001 tolerance
   covers both but doesn't catch a genuine 2dp rate such as 34.09 or 34.10.
 - **D for 2023.** Three slots are too few to pin D down, so above-floor
-  rates in 2023 are flagged as capped.
+  rates in 2023 are flagged as capped, with a lower bound only.
 - **Window.** The first 4dp rate is at 07:00 UTC on 1 October 2022, and
   the last is on 29 June 2023.  The window runs over whole quarters to
   match the EPG's quarterly discount.

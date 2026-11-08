@@ -57,7 +57,7 @@ A separate pipeline calibrates price curves: the relationship between wholesale 
 
 ### Stages
 
-1. **Load.** Three data loaders in `fleet_sim/data/` provide wholesale prices (inverted from Agile), residual load, and marginal fuel cost. `build_dataset` in `prices/dataset.py` joins them on settlement period into `PriceObservation` records. It drops capped Agile slots and slots missing any input, and records per year how many each rule dropped. `summarise` gives rows and the mean and range of π, R and k per year.
+1. **Load.** Three data loaders in `fleet_sim/data/` provide wholesale prices (inverted from Agile), residual load, and marginal fuel cost. `build_dataset` in `prices/dataset.py` joins them on settlement period into `PriceObservation` records. It drops slots missing any input, and records per year how many each rule dropped. A slot whose Agile rate is capped is kept as a censored observation: its π is a lower bound, with an upper bound where one is known (the Q4 2022 EPG floor). `summarise` gives rows, censored rows, and the mean and range of π (exact slots only), R and k per year. Fitting doesn't use bounds yet, so `exact_only` removes censored slots once, in `scripts/fit_price_curves.py`, before anything is fitted or evaluated.
 2. **Split.** Splits are by whole year, because neighbouring half-hours are near-duplicates. `selection_folds` makes the leave-one-year-out folds for model selection, over the training years only. `final_test_split` is the only function that returns final-test rows; `compare` never calls it.
 3. **Transform.** A `Target` extracts the dependent variable from each observation. Raw targets use the wholesale price directly; the fuel-adjusted target subtracts fuel cost. A target also says whether to fit per year or pool all years.
 4. **Fit.** A `PriceCurve` fits `(residual_load, y)` data and returns a `FittedCurve` with `predict` and `slope` methods. No family knows about targets.
@@ -70,11 +70,11 @@ A model is a (curve family, target) pair. The family does not know about targets
 
 | Type | Role |
 | --- | --- |
-| `PriceObservation` | One half-hour: timestamp, wholesale price (£/MWh), residual load (GW), fuel cost (£/MWh), year |
-| `PriceDataset` | Aligned observations, with the per-year drop counts (`YearDrops`) that produced them |
+| `PriceObservation` | One half-hour: timestamp, wholesale price (£/MWh), whether it is censored and its upper bound if known, residual load (GW), fuel cost (£/MWh), year |
+| `PriceDataset` | Aligned observations, with the per-year drop and censored counts (`YearDrops`) that produced them |
 | `SplitSpec` | `[splits]` config: training years and the final-test year, which must come after them |
 | `Fold` | One leave-one-year-out split: held-out year, train and test datasets |
-| `YearSummary` | Rows and the mean and range of π, R and k for one year |
+| `YearSummary` | Rows, censored rows, and the mean and range of π (exact slots only), R and k for one year |
 | `FittedCurve` | Protocol: `predict(r_gw)` and `slope(r_gw)` |
 | `PriceCurve` | Protocol: `fit(r_gw, y) -> FittedCurve` |
 | `Target` | Protocol: `to_target(obs) -> y`, `to_price(y, obs) -> price`, `per_year` flag |

@@ -28,12 +28,19 @@ from fleet_sim.prices.config import CalibrationConfig, SplitSpec
 
 
 class PriceObservation(BaseModel):
-    """One half-hour settlement period with aligned price, load, and cost."""
+    """One half-hour settlement period with aligned price, load, and cost.
+
+    A ``censored`` slot's Agile rate was capped, so π is known only as a
+    bound: ``wholesale_price_gbp_per_mwh`` is the lower bound and
+    ``wholesale_upper_gbp_per_mwh`` the upper bound, or None if unknown.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     settlement_start: datetime
     wholesale_price_gbp_per_mwh: float
+    censored: bool
+    wholesale_upper_gbp_per_mwh: float | None
     residual_load_gw: float
     fuel_cost_gbp_per_mwh: float
     year: int
@@ -54,30 +61,52 @@ class PriceObservation(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def upper_bound_valid(self) -> PriceObservation:
+        upper = self.wholesale_upper_gbp_per_mwh
+        if upper is None:
+            return self
+        if not self.censored:
+            raise ValueError("an exact slot can't have an upper bound")
+        if upper <= self.wholesale_price_gbp_per_mwh:
+            raise ValueError(
+                f"upper bound ({upper}) must exceed "
+                f"lower bound ({self.wholesale_price_gbp_per_mwh})"
+            )
+        return self
+
 
 class YearDrops(BaseModel):
     """How many of one year's settlement periods each rule dropped.
 
     Each slot is counted under the first rule that drops it, in the order
-    capped, missing price, missing residual load, missing fuel cost, so
-    the counts plus ``kept`` add up to ``expected_slots``.
+    missing price, missing residual load, missing fuel cost, so the counts
+    plus ``kept`` add up to ``expected_slots``.  ``censored`` counts the
+    kept slots whose price is only a bound; it is part of ``kept``.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     year: int
     expected_slots: int
-    capped: int
     missing_price: int
     missing_residual_load: int
     missing_fuel_cost: int
     kept: int
+    censored: int
+
+    @model_validator(mode="after")
+    def censored_within_kept(self) -> YearDrops:
+        if self.censored > self.kept:
+            raise ValueError(
+                f"{self.year}: censored ({self.censored}) exceeds kept ({self.kept})"
+            )
+        return self
 
     @model_validator(mode="after")
     def counts_add_up(self) -> YearDrops:
         total = (
-            self.capped
-            + self.missing_price
+            self.missing_price
             + self.missing_residual_load
             + self.missing_fuel_cost
             + self.kept
@@ -122,12 +151,17 @@ class Fold(BaseModel):
 
 
 class YearSummary(BaseModel):
-    """Row count and the mean and range of π, R and k for one year."""
+    """Row counts and the mean and range of π, R and k for one year.
+
+    ``rows`` includes ``censored_rows``.  The π statistics cover exact
+    slots only; R and k cover every row.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     year: int
     rows: int
+    censored_rows: int
     price_mean_gbp_per_mwh: float
     price_min_gbp_per_mwh: float
     price_max_gbp_per_mwh: float
@@ -143,10 +177,10 @@ def build_dataset(config: CalibrationConfig) -> PriceDataset:
     """Join π, R and k on settlement period over the configured date range.
 
     The expected slots are every settlement period of every UK day from
-    ``data.start`` to ``data.end`` inclusive.  A slot is dropped when its
-    Agile price is capped (the wholesale price can't be recovered) or when
-    any of the three inputs is missing.  The wholesale price uses the
-    first configured Agile region.
+    ``data.start`` to ``data.end`` inclusive.  A slot is dropped when any
+    of the three inputs is missing.  A slot whose Agile price is capped is
+    kept as a censored observation, with π as bounds.  The wholesale price
+    uses the first configured Agile region.
     """
     data = config.data
     cache_dir = Path(data.cache_dir)
@@ -186,18 +220,19 @@ def build_dataset(config: CalibrationConfig) -> PriceDataset:
             rate = prices.get(stamp)
             if rate is None:
                 year_counts["missing_price"] += 1
-            elif rate.capped:
-                year_counts["capped"] += 1
             elif stamp not in loads:
                 year_counts["missing_residual_load"] += 1
             elif stamp not in costs:
                 year_counts["missing_fuel_cost"] += 1
             else:
                 year_counts["kept"] += 1
+                year_counts["censored"] += rate.capped
                 observations.append(
                     PriceObservation(
                         settlement_start=stamp,
                         wholesale_price_gbp_per_mwh=rate.wholesale_gbp_per_mwh,
+                        censored=rate.capped,
+                        wholesale_upper_gbp_per_mwh=rate.wholesale_upper_gbp_per_mwh,
                         residual_load_gw=loads[stamp],
                         fuel_cost_gbp_per_mwh=costs[stamp],
                         year=stamp.year,
@@ -213,15 +248,27 @@ def build_dataset(config: CalibrationConfig) -> PriceDataset:
         YearDrops(
             year=year,
             expected_slots=c["expected"],
-            capped=c["capped"],
             missing_price=c["missing_price"],
             missing_residual_load=c["missing_residual_load"],
             missing_fuel_cost=c["missing_fuel_cost"],
             kept=c["kept"],
+            censored=c["censored"],
         )
         for year, c in sorted(counts.items())
     ]
     return PriceDataset(observations=observations, drops=drops)
+
+
+def exact_only(dataset: PriceDataset) -> PriceDataset:
+    """The dataset without its censored observations; drop counts unchanged.
+
+    The one place censored slots are removed before fitting or evaluation.
+    Temporary: remove it once fitting supports bounds.
+    """
+    return PriceDataset(
+        observations=[obs for obs in dataset.observations if not obs.censored],
+        drops=dataset.drops,
+    )
 
 
 def selection_data(dataset: PriceDataset, spec: SplitSpec) -> PriceDataset:
@@ -261,17 +308,23 @@ def final_test_split(
 
 
 def summarise(dataset: PriceDataset) -> list[YearSummary]:
-    """Rows and the mean, min and max of π, R and k, one entry per year."""
+    """Rows and the mean, min and max of π, R and k, one entry per year.
+
+    π statistics use exact slots only, since a censored π is only a bound.
+    """
     summaries: list[YearSummary] = []
     for year in dataset.years:
         rows = [obs for obs in dataset.observations if obs.year == year]
-        price = [obs.wholesale_price_gbp_per_mwh for obs in rows]
+        price = [obs.wholesale_price_gbp_per_mwh for obs in rows if not obs.censored]
+        if not price:
+            raise ValueError(f"{year}: every slot is censored, so π is unknown")
         load = [obs.residual_load_gw for obs in rows]
         cost = [obs.fuel_cost_gbp_per_mwh for obs in rows]
         summaries.append(
             YearSummary(
                 year=year,
                 rows=len(rows),
+                censored_rows=len(rows) - len(price),
                 price_mean_gbp_per_mwh=fmean(price),
                 price_min_gbp_per_mwh=min(price),
                 price_max_gbp_per_mwh=max(price),

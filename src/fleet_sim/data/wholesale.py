@@ -65,7 +65,8 @@ def invert_rates(
 ) -> list[InvertedRate]:
     """Invert Agile rates to wholesale for the full date range.
 
-    Returns all slots including capped ones (with ``capped=True``).
+    Returns all slots including capped ones (with ``capped=True``), whose
+    wholesale price is a lower bound with an upper bound where one is known.
     """
     spans = version_date_ranges(period_from.date(), period_to.date())
 
@@ -107,7 +108,7 @@ def _invert_one(
     stamp = rate.valid_from.replace(tzinfo=UTC)
     version = best_version_for_date(stamp.date())
     peak = is_peak(stamp)
-    wholesale_p, capped = invert_agile(
+    wholesale_p, upper_p, capped = invert_agile(
         rate.value_exc_vat,
         region=region,
         peak=peak,
@@ -117,6 +118,7 @@ def _invert_one(
     return InvertedRate(
         settlement_start=stamp,
         wholesale_gbp_per_mwh=wholesale_p * 10,
+        wholesale_upper_gbp_per_mwh=None if upper_p is None else upper_p * 10,
         capped=capped,
         product_code=product_code,
         region=region,
