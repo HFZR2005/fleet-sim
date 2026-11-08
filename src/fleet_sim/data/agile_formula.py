@@ -92,12 +92,17 @@ class RegionParams(BaseModel):
 
 
 class InvertedRate(BaseModel):
-    """One half-hour wholesale price recovered from an Agile retail rate."""
+    """One half-hour wholesale price recovered from an Agile retail rate.
+
+    When ``capped`` is True, ``wholesale_gbp_per_mwh`` is a lower bound and
+    ``wholesale_upper_gbp_per_mwh`` is the upper bound, or None if unknown.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     settlement_start: datetime
     wholesale_gbp_per_mwh: float
+    wholesale_upper_gbp_per_mwh: float | None
     capped: bool
     product_code: str
     region: str
@@ -216,24 +221,34 @@ def invert_agile(
     peak: bool,
     version: AgileVersion,
     settlement_start: datetime,
-) -> tuple[float, bool]:
+) -> tuple[float, float | None, bool]:
     """Inverse formula: exc-VAT retail rate → wholesale.
 
-    Returns ``(wholesale_p_per_kwh, capped)``.  When *capped* is True the
-    returned wholesale is a lower bound, not the true price.
+    Returns ``(wholesale_p_per_kwh, upper_p_per_kwh, capped)``.  When
+    *capped* is True the wholesale is a lower bound, not the true price,
+    and the upper bound is set where one is known (else None).  An exact
+    slot has no upper bound.
 
     During the Energy Price Guarantee the billed rate was::
 
         billed = formula                    if formula ≤ floor
         billed = max(formula − D, floor)    otherwise
 
-    so a rate at the floor is flagged as capped, and a rate above it has D
-    added back before inversion (or is flagged when D is unknown).
+    so a rate at the floor is capped with the formula in [floor, floor + D]
+    (upper bound unknown when D is), and a rate above it has D added back
+    before inversion (or is capped with only a lower bound when D is
+    unknown, since formula = billed + D > billed).
+
+    Both bounds are inverted the same way::
+
+        wholesale_p = (value_exc_vat − peak_adder) / multiplier
 
     See ``docs/data/agile.md §Inversion`` and ``§Energy Price Guarantee``.
     """
     params = _require_region_params(region)
+    adder = params.peak_adder_p_per_kwh if peak else 0.0
     epg_capped = False
+    upper_p: float | None = None
     epg = _epg_adjustment(settlement_start)
     if epg is not None:
         if region.upper() not in _EPG_REGIONS:
@@ -248,13 +263,14 @@ def invert_agile(
             at_floor = value_exc_vat < floor + _EPG_FLOOR_TOLERANCE_P_PER_KWH
             if at_floor or discount is None:
                 epg_capped = True
+                if at_floor and discount is not None:
+                    upper_p = (floor + discount - adder) / params.multiplier
             else:
                 value_exc_vat += discount
     cap = version.cap_exc_vat_p_per_kwh
     capped = epg_capped or value_exc_vat >= cap - _CAP_TOLERANCE_P_PER_KWH
-    adder = params.peak_adder_p_per_kwh if peak else 0.0
     wholesale_p = (value_exc_vat - adder) / params.multiplier
-    return (wholesale_p, capped)
+    return (wholesale_p, upper_p, capped)
 
 
 def best_version_for_date(day: date) -> AgileVersion:

@@ -80,10 +80,11 @@ def test_invert_recovers_an_uncapped_wholesale_price(
 ) -> None:
     """apply then invert returns the input, for the extreme region multipliers."""
     exc, _ = apply_agile(5.0, region=region, peak=peak, version=version)
-    wholesale, capped = invert_agile(
+    wholesale, upper, capped = invert_agile(
         exc, region=region, peak=peak, version=version, settlement_start=_NO_EPG
     )
     assert wholesale == pytest.approx(5.0)
+    assert upper is None
     assert not capped
 
 
@@ -100,7 +101,7 @@ def test_invert_recovers_an_uncapped_wholesale_price(
 def test_invert_flags_a_rate_at_the_cap(
     value_exc_vat: float, version: AgileVersion, expected: bool
 ) -> None:
-    _, capped = invert_agile(
+    _, _, capped = invert_agile(
         value_exc_vat,
         region="C",
         peak=False,
@@ -114,36 +115,42 @@ _EPG_Q4 = datetime(2022, 11, 1, 12, tzinfo=UTC)
 
 
 @pytest.mark.parametrize(
-    ("value_exc_vat", "stamp", "expected_wholesale", "expected_capped"),
+    ("value_exc_vat", "stamp", "expected_wholesale", "expected_upper", "capped"),
     [
-        # At the 34.0926 floor inside the window: censored.
-        (34.0926, _EPG_Q4, 34.0926 / 2, True),
+        # At the 34.0926 floor inside the window: formula in [F, F + D], so
+        # bounds [34.0926 / 2, (34.0926 + 16.9983) / 2] = [17.0463, 25.54545].
+        (34.0926, _EPG_Q4, 34.0926 / 2, (34.0926 + 16.9983) / 2, True),
         # Same value before the window is an ordinary rate: 34.0926 / 2.
-        (34.0926, datetime(2022, 9, 15, 12, tzinfo=UTC), 34.0926 / 2, False),
-        # Rounding variant of the floor.
-        (34.0927, _EPG_Q4, 34.0927 / 2, True),
+        (34.0926, datetime(2022, 9, 15, 12, tzinfo=UTC), 34.0926 / 2, None, False),
+        # Rounding variant of the floor: lower bound is the billed rate,
+        # upper bound is still F + D.
+        (34.0927, _EPG_Q4, 34.0927 / 2, (34.0926 + 16.9983) / 2, True),
         # Below the floor the formula is untouched: 30 / 2 = 15.
-        (30.0, _EPG_Q4, 15.0, False),
+        (30.0, _EPG_Q4, 15.0, None, False),
         # Above the floor, add D back: (35.0017 + 16.9983) / 2 = 52 / 2 = 26.
-        (35.0017, _EPG_Q4, 26.0, False),
-        # 57.2817 + 16.9983 = 74.28 ≥ 74.29 − 0.1: the 78p cap binds.
-        (57.2817, _EPG_Q4, 74.28 / 2, True),
-        # Q1 2023 discount is unknown, so an above-floor rate can't be recovered.
-        (34.8798, datetime(2023, 2, 1, 12, tzinfo=UTC), 34.8798 / 2, True),
+        (35.0017, _EPG_Q4, 26.0, None, False),
+        # 57.2817 + 16.9983 = 74.28 ≥ 74.29 − 0.1: the 78p cap binds, so
+        # only a lower bound.
+        (57.2817, _EPG_Q4, 74.28 / 2, None, True),
+        # Q1 2023 discount is unknown: formula = billed + D > billed, so the
+        # billed rate is a lower bound with no upper bound.
+        (34.8798, datetime(2023, 2, 1, 12, tzinfo=UTC), 34.8798 / 2, None, True),
     ],
 )
 def test_invert_undoes_the_epg_adjustment_in_region_c(
     value_exc_vat: float,
     stamp: datetime,
     expected_wholesale: float,
-    expected_capped: bool,
+    expected_upper: float | None,
+    capped: bool,
 ) -> None:
     """Region C off-peak, multiplier 2.00, AGILE-22-08-31 (cap 74.29)."""
-    wholesale, capped = invert_agile(
+    wholesale, upper, got_capped = invert_agile(
         value_exc_vat, region="C", peak=False, version=_V22, settlement_start=stamp
     )
     assert wholesale == pytest.approx(expected_wholesale)
-    assert capped is expected_capped
+    assert upper == pytest.approx(expected_upper)
+    assert got_capped is capped
 
 
 @pytest.mark.parametrize(
@@ -238,26 +245,35 @@ def test_load_agile_rates_parses_and_caches(tmp_path: Path) -> None:
     assert len(calls) == 1
 
 
-def test_invert_rates_converts_to_gbp_per_mwh_and_flags_capped_slots(
+def test_invert_rates_converts_to_gbp_per_mwh_with_bounds_on_capped_slots(
     tmp_path: Path,
 ) -> None:
-    """2020 uses the 35p product, region C off-peak.
+    """Q4 2022, AGILE-22-08-31, region C off-peak, multiplier 2.00.
 
-    Uncapped: 10 / 2.00 = 5 p/kWh = £50/MWh. The last two slots sit at the cap.
+    Exact:     10 / 2 = 5 p/kWh = £50/MWh.
+    EPG floor: [34.0926 / 2 × 10, (34.0926 + 16.9983) / 2 × 10]
+               = [170.463, 255.4545] £/MWh.
+    78p cap:   (57.2817 + 16.9983) / 2 × 10 = 74.28 / 2 × 10 = 371.4 £/MWh,
+               lower bound only.
     """
-    start = datetime(2020, 6, 15, tzinfo=UTC)
-    stamps = [start + timedelta(minutes=30 * i) for i in range(4)]
-    cap = _V18.cap_exc_vat_p_per_kwh
-    page = _api_page(stamps, [10.0, 10.0, cap, cap])
+    start = datetime(2022, 11, 1, tzinfo=UTC)
+    stamps = [start + timedelta(minutes=30 * i) for i in range(3)]
+    page = _api_page(stamps, [10.0, 34.0926, 57.2817])
 
-    inverted = invert_rates(
+    exact, floor, cap = invert_rates(
         region="C",
         period_from=start,
-        period_to=start + timedelta(hours=2),
+        period_to=start + timedelta(hours=1, minutes=30),
         cache_dir=tmp_path,
         opener=lambda url: page,
     )
 
-    assert [r.capped for r in inverted] == [False, False, True, True]
-    assert inverted[0].wholesale_gbp_per_mwh == pytest.approx(50.0)
-    assert inverted[1].wholesale_gbp_per_mwh == pytest.approx(50.0)
+    assert exact.wholesale_gbp_per_mwh == pytest.approx(50.0)
+    assert exact.wholesale_upper_gbp_per_mwh is None
+    assert not exact.capped
+    assert floor.capped
+    assert floor.wholesale_gbp_per_mwh == pytest.approx(170.463)
+    assert floor.wholesale_upper_gbp_per_mwh == pytest.approx(255.4545)
+    assert cap.capped
+    assert cap.wholesale_gbp_per_mwh == pytest.approx(371.4)
+    assert cap.wholesale_upper_gbp_per_mwh is None

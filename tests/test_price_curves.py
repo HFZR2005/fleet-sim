@@ -15,6 +15,7 @@ from fleet_sim.prices.dataset import (
     PriceDataset,
     PriceObservation,
     build_dataset,
+    exact_only,
     final_test_split,
     selection_data,
     selection_folds,
@@ -62,46 +63,81 @@ def _config(tmp_path: Path) -> CalibrationConfig:
     )
 
 
-def _rate(stamp: datetime, price: float, *, capped: bool = False) -> InvertedRate:
+def _rate(
+    stamp: datetime, price: float, *, upper: float | None = None, capped: bool = False
+) -> InvertedRate:
     return InvertedRate(
         settlement_start=stamp,
         wholesale_gbp_per_mwh=price,
+        wholesale_upper_gbp_per_mwh=upper,
         capped=capped,
         product_code="AGILE-TEST",
         region="C",
     )
 
 
-def _dataset(rows: list[tuple[int, float, float, float]]) -> PriceDataset:
-    """A dataset from ``(year, π, R, k)`` rows, one slot apart on 15 June."""
+def _dataset(
+    rows: list[tuple[int, float, float, float]],
+    *,
+    censored: frozenset[int] = frozenset(),
+) -> PriceDataset:
+    """A dataset from ``(year, π, R, k)`` rows, one slot apart on 15 June.
+
+    Rows whose index is in ``censored`` are censored, with π a lower bound.
+    """
     observations = [
-        PriceObservation(
-            settlement_start=settlement_periods_utc(date(year, 6, 15))[i],
-            wholesale_price_gbp_per_mwh=price,
-            residual_load_gw=load,
-            fuel_cost_gbp_per_mwh=cost,
-            year=year,
+        _observation(
+            settlement_periods_utc(date(year, 6, 15))[i],
+            price,
+            censored=i in censored,
+            load=load,
+            cost=cost,
         )
         for i, (year, price, load, cost) in enumerate(rows)
     ]
     return PriceDataset(observations=observations, drops=[])
 
 
+def _observation(
+    stamp: datetime,
+    price: float,
+    *,
+    censored: bool = False,
+    upper: float | None = None,
+    load: float = 30.0,
+    cost: float = 25.0,
+) -> PriceObservation:
+    return PriceObservation(
+        settlement_start=stamp,
+        wholesale_price_gbp_per_mwh=price,
+        censored=censored,
+        wholesale_upper_gbp_per_mwh=upper,
+        residual_load_gw=load,
+        fuel_cost_gbp_per_mwh=cost,
+        year=stamp.year,
+    )
+
+
 def test_build_dataset_drops_and_counts_each_rule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One UK summer day: 48 settlement periods, four of them dropped.
+    """One UK summer day: 48 settlement periods, three of them dropped.
 
-    Slot 0: capped (also missing k, but counted once, under the first rule)
+    Slot 0: capped, kept as censored with bounds [50, 80]
     Slot 1: no Agile price
     Slot 2: no residual load
     Slot 3: no fuel cost
-    Kept: 48 - 4 = 44, starting at slot 4.
+    Slot 4: capped and no fuel cost, dropped as missing fuel cost
+    Kept: 48 - 4 = 44, one of them censored.
     """
     stamps = settlement_periods_utc(date(2024, 6, 15))
-    rates = [_rate(s, 50.0 + i, capped=i == 0) for i, s in enumerate(stamps) if i != 1]
+    rates = [
+        _rate(s, 50.0 + i, upper=80.0 if i == 0 else None, capped=i in (0, 4))
+        for i, s in enumerate(stamps)
+        if i != 1
+    ]
     loads = [(s, 25.0 + i) for i, s in enumerate(stamps) if i != 2]
-    costs = [(s, 60.0) for i, s in enumerate(stamps) if i not in (0, 3)]
+    costs = [(s, 60.0) for i, s in enumerate(stamps) if i not in (3, 4)]
     monkeypatch.setattr("fleet_sim.prices.dataset.invert_rates", lambda **_: rates)
     monkeypatch.setattr(
         "fleet_sim.prices.dataset.load_residual_load", lambda **_: loads
@@ -113,14 +149,20 @@ def test_build_dataset_drops_and_counts_each_rule(
     [drops] = dataset.drops
     assert drops.year == 2024
     assert drops.expected_slots == 48
-    assert (drops.capped, drops.missing_price) == (1, 1)
-    assert (drops.missing_residual_load, drops.missing_fuel_cost) == (1, 1)
+    assert (drops.missing_price, drops.missing_residual_load) == (1, 1)
+    assert drops.missing_fuel_cost == 2
     assert drops.kept == len(dataset.observations) == 44
-    first = dataset.observations[0]
-    assert first.settlement_start == stamps[4]
-    assert first.wholesale_price_gbp_per_mwh == 54.0
-    assert first.residual_load_gw == 29.0
-    assert first.fuel_cost_gbp_per_mwh == 60.0
+    assert drops.censored == 1
+    censored, exact = dataset.observations[:2]
+    assert censored.settlement_start == stamps[0]
+    assert censored.censored
+    assert censored.wholesale_price_gbp_per_mwh == 50.0
+    assert censored.wholesale_upper_gbp_per_mwh == 80.0
+    assert exact.settlement_start == stamps[5]
+    assert not exact.censored
+    assert exact.wholesale_price_gbp_per_mwh == 55.0
+    assert exact.residual_load_gw == 30.0
+    assert exact.fuel_cost_gbp_per_mwh == 60.0
 
 
 def test_folds_hold_out_each_training_year_and_never_the_final_year() -> None:
@@ -160,17 +202,24 @@ def test_split_spec_rejects(
 def test_summarise_per_year() -> None:
     """Hand-worked.
 
-    2023: π = 10, 30 → mean 20; R = 20, 26 → mean 23; k = 5, 7 → mean 6.
+    2023: exact π = 10, 30 → mean 20 (the censored 500 is left out);
+          R = 20, 26, 23 → mean 23; k = 5, 7, 6 → mean 6.
     2024: one row, so mean = min = max.
     """
     dataset = _dataset(
-        [(2023, 10.0, 20.0, 5.0), (2023, 30.0, 26.0, 7.0), (2024, -5.0, 15.0, 40.0)]
+        [
+            (2023, 10.0, 20.0, 5.0),
+            (2023, 30.0, 26.0, 7.0),
+            (2023, 500.0, 23.0, 6.0),
+            (2024, -5.0, 15.0, 40.0),
+        ],
+        censored=frozenset({2}),
     )
 
     first, second = summarise(dataset)
 
     assert first.year == 2023
-    assert first.rows == 2
+    assert (first.rows, first.censored_rows) == (3, 1)
     assert first.price_mean_gbp_per_mwh == pytest.approx(20.0)
     assert (first.price_min_gbp_per_mwh, first.price_max_gbp_per_mwh) == (10.0, 30.0)
     assert first.residual_load_mean_gw == pytest.approx(23.0)
@@ -181,7 +230,7 @@ def test_summarise_per_year() -> None:
         7.0,
     )
     assert second.year == 2024
-    assert second.rows == 1
+    assert (second.rows, second.censored_rows) == (1, 0)
     assert second.price_mean_gbp_per_mwh == second.price_min_gbp_per_mwh == -5.0
 
 
@@ -200,10 +249,43 @@ def test_price_observation_year_must_match_timestamp() -> None:
         PriceObservation(
             settlement_start=datetime(2024, 6, 15, tzinfo=UTC),
             wholesale_price_gbp_per_mwh=50.0,
+            censored=False,
+            wholesale_upper_gbp_per_mwh=None,
             residual_load_gw=30.0,
             fuel_cost_gbp_per_mwh=25.0,
             year=2023,
         )
+
+
+@pytest.mark.parametrize(
+    ("censored", "upper", "message"),
+    [
+        (False, 80.0, "exact slot can't have an upper bound"),
+        (True, 50.0, "must exceed lower bound"),
+    ],
+)
+def test_price_observation_rejects_invalid_upper_bound(
+    censored: bool, upper: float, message: str
+) -> None:
+    """Lower bound is 50 in every row."""
+    with pytest.raises(ValueError, match=message):
+        _observation(
+            datetime(2024, 6, 15, tzinfo=UTC), 50.0, censored=censored, upper=upper
+        )
+
+
+def test_exact_only_removes_censored_observations() -> None:
+    dataset = _dataset(
+        [(2024, 10.0, 20.0, 5.0), (2024, 500.0, 26.0, 7.0), (2024, 30.0, 22.0, 6.0)],
+        censored=frozenset({1}),
+    )
+
+    exact = exact_only(dataset)
+
+    assert [obs.wholesale_price_gbp_per_mwh for obs in exact.observations] == [
+        10.0,
+        30.0,
+    ]
 
 
 def test_constant_curve_predicts_mean() -> None:
@@ -222,13 +304,7 @@ def test_constant_curve_predicts_mean() -> None:
 def test_raw_target_is_identity() -> None:
     """RawTarget returns the wholesale price unchanged."""
     target = TARGETS["raw_pooled"]
-    obs = PriceObservation(
-        settlement_start=datetime(2024, 6, 15, tzinfo=UTC),
-        wholesale_price_gbp_per_mwh=50.0,
-        residual_load_gw=30.0,
-        fuel_cost_gbp_per_mwh=25.0,
-        year=2024,
-    )
+    obs = _observation(datetime(2024, 6, 15, tzinfo=UTC), 50.0)
     assert target.to_target(obs) == pytest.approx(50.0)
     assert target.to_price(50.0, obs) == pytest.approx(50.0)
 
@@ -240,12 +316,6 @@ def test_fuel_adjusted_target_subtracts_cost() -> None:
     to_price(25, obs) = 25 + 25 = 50.
     """
     target = TARGETS["fuel_adjusted"]
-    obs = PriceObservation(
-        settlement_start=datetime(2024, 6, 15, tzinfo=UTC),
-        wholesale_price_gbp_per_mwh=50.0,
-        residual_load_gw=30.0,
-        fuel_cost_gbp_per_mwh=25.0,
-        year=2024,
-    )
+    obs = _observation(datetime(2024, 6, 15, tzinfo=UTC), 50.0)
     assert target.to_target(obs) == pytest.approx(25.0)
     assert target.to_price(25.0, obs) == pytest.approx(50.0)
