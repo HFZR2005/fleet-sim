@@ -5,6 +5,8 @@ covers:
   - models/scenario.py
   - fleet/network.py
   - fleet/overload.py
+  - prices/curves.py
+  - prices/targets.py
 ---
 
 # One-home problem
@@ -384,6 +386,47 @@ Over one or more days, the replication summary aggregates the per-transformer pe
 ### Overload crossing
 
 At a sequence of penetration levels $`p_1 < p_2 < \ldots < p_K`$, the **overload crossing** for one replication is the smallest $`p_k`$ where the share of transformers overloaded is above zero. It is absent when no level overloads. Over $`R`$ replications, the crossing range is the minimum and maximum of the per-replication crossings, and the **interval-based crossing** is the first $`p_k`$ whose 95% t-interval for the overloaded share lies entirely above zero.
+
+## Price curves
+
+A price curve says how the wholesale price moves with residual load. It is fitted to history and is not part of the one-home problem.
+
+### Model
+
+In half-hour $`i`$ the wholesale price is $`\pi_i`$ (£/MWh), the residual load is $`R_i`$ (GW), and the marginal fuel cost is $`k_i`$ (£/MWh). The model is
+
+```math
+\pi_i = k_i\, h(R_i) + \varepsilon_i,
+```
+
+where $`h`$ is a curve from one of the families below and $`\varepsilon_i`$ is noise. A target turns each observation into the value $`y_i`$ that $`h`$ is fitted to:
+
+- **Raw:** $`y_i = \pi_i`$. This is the model with $`k_i = 1`$, and $`h`$ is in £/MWh.
+- **Fuel-adjusted:** $`y_i = \pi_i / k_i`$, which needs $`k_i > 0`$. $`h`$ is then dimensionless.
+
+The price is recovered as $`\pi = k\, h(R)`$, with $`k = 1`$ for the raw target.
+
+### Fitting objective
+
+A family's parameters $`\theta`$ are chosen by least squares:
+
+```math
+\hat\theta = \arg\min_\theta \sum_i \bigl(y_i - h_\theta(R_i)\bigr)^2.
+```
+
+Each family below is linear in its parameters, $`h_\theta(R) = x(R)^\top \theta`$ for a feature vector $`x(R)`$. Setting the gradient to zero gives the normal equations $`X^\top X \hat\theta = X^\top y`$, where row $`i`$ of $`X`$ is $`x(R_i)^\top`$.
+
+### Families
+
+| Family | $`h(R)`$ | $`h'(R)`$ | Estimate |
+| --- | --- | --- | --- |
+| Cubic | $`a R^3`$ | $`3 a R^2`$ | $`\hat a = \sum_i y_i R_i^3 \big/ \sum_i R_i^6`$ |
+| Signed quadratic | $`a\, \operatorname{sgn}(R)\, R^2 = a R \lvert R\rvert`$ | $`2 a \lvert R\rvert`$ | $`\hat a = \sum_i y_i R_i \lvert R_i\rvert \big/ \sum_i R_i^4`$ |
+| Cubic with offset | $`a_0 + a_1 R + a_3 R^3`$ | $`a_1 + 3 a_3 R^2`$ | Normal equations with $`x(R) = (1, R, R^3)`$ |
+
+For the one-parameter families, $`X`$ is a single column $`x_i`$, so the normal equations reduce to $`\hat a = \sum_i x_i y_i / \sum_i x_i^2`$. That is $`x_i = R_i^3`$ for the cubic and $`x_i = R_i \lvert R_i\rvert`$ for the signed quadratic, whose square is $`R_i^4`$. The estimate is undefined when every $`R_i = 0`$. The cubic with offset needs at least three distinct $`R_i`$ for $`X^\top X`$ to be invertible.
+
+The cubic and the signed quadratic pass through the origin, and both are odd functions, so they rise through zero residual load. The signed quadratic is $`R^2`$ for positive load and $`-R^2`$ for negative load. Its slope is continuous but its second derivative is not.
 
 ## Later extensions
 

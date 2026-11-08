@@ -14,7 +14,7 @@ training_years = [2021, 2022, 2023, 2024]
 final_test_year = 2025
 
 [models]
-families = ["constant"]
+families = ["constant", "cubic", "signed_quadratic", "cubic_offset"]
 targets = ["raw_pooled", "raw_per_year", "fuel_adjusted"]
 
 [evaluation]

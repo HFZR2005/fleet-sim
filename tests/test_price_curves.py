@@ -309,13 +309,31 @@ def test_raw_target_is_identity() -> None:
     assert target.to_price(50.0, obs) == pytest.approx(50.0)
 
 
-def test_fuel_adjusted_target_subtracts_cost() -> None:
-    """FuelAdjustedTarget subtracts fuel cost and reverses it.
+def test_fuel_adjusted_target_divides_by_cost() -> None:
+    """FuelAdjustedTarget divides price by fuel cost and reverses it.
 
-    Hand-worked: price = 50, fuel = 25, so y = 25.
-    to_price(25, obs) = 25 + 25 = 50.
+    Hand-worked: π = 50, k = 25, so y = 50 / 25 = 2.
+    to_price(2, obs) = 25 · 2 = 50.
     """
     target = TARGETS["fuel_adjusted"]
-    obs = _observation(datetime(2024, 6, 15, tzinfo=UTC), 50.0)
-    assert target.to_target(obs) == pytest.approx(25.0)
-    assert target.to_price(25.0, obs) == pytest.approx(50.0)
+    obs = _observation(datetime(2024, 6, 15, tzinfo=UTC), 50.0, cost=25.0)
+    assert target.to_target(obs) == pytest.approx(2.0)
+    assert target.to_price(2.0, obs) == pytest.approx(50.0)
+
+
+@pytest.mark.parametrize("target_name", sorted(TARGETS))
+@pytest.mark.parametrize("price", [-12.5, 0.0, 87.3])
+def test_target_round_trips(target_name: str, price: float) -> None:
+    """to_price(to_target(obs), obs) recovers π for every target."""
+    target = TARGETS[target_name]
+    obs = _observation(datetime(2024, 6, 15, tzinfo=UTC), price, cost=31.7)
+    assert target.to_price(target.to_target(obs), obs) == pytest.approx(price)
+
+
+@pytest.mark.parametrize("cost", [0.0, -5.0])
+def test_fuel_adjusted_target_rejects_non_positive_cost(cost: float) -> None:
+    """Dividing by k ≤ 0 is undefined or flips the sign of y."""
+    target = TARGETS["fuel_adjusted"]
+    obs = _observation(datetime(2024, 6, 15, tzinfo=UTC), 50.0, cost=cost)
+    with pytest.raises(ValueError, match="fuel cost must be positive"):
+        target.to_target(obs)

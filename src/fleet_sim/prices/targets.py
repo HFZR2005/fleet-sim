@@ -53,7 +53,12 @@ class RawTarget:
 
 
 class FuelAdjustedTarget:
-    """Fuel-adjusted transform: y = wholesale price − fuel cost."""
+    """Fuel-adjusted transform: y = π / k.
+
+    The model is π = k·h(R) + ε, so dividing by the fuel cost k leaves
+    the dimensionless curve h(R) to fit.  k must be positive, or y is
+    undefined or flips sign.  See ``docs/formulation.md``, Price curves.
+    """
 
     def __init__(self, *, per_year: bool = False) -> None:
         self._per_year = per_year
@@ -63,10 +68,23 @@ class FuelAdjustedTarget:
         return self._per_year
 
     def to_target(self, obs: PriceObservation) -> float:
-        return obs.wholesale_price_gbp_per_mwh - obs.fuel_cost_gbp_per_mwh
+        """y = π / k."""
+        return obs.wholesale_price_gbp_per_mwh / _positive_fuel_cost(obs)
 
     def to_price(self, y: float, obs: PriceObservation) -> float:
-        return y + obs.fuel_cost_gbp_per_mwh
+        """π = k·y."""
+        return y * _positive_fuel_cost(obs)
+
+
+def _positive_fuel_cost(obs: PriceObservation) -> float:
+    """Return the fuel cost k, rejecting k <= 0."""
+    k = obs.fuel_cost_gbp_per_mwh
+    if k <= 0:
+        raise ValueError(
+            f"fuel cost must be positive to divide by it "
+            f"(got {k} at {obs.settlement_start.isoformat()})"
+        )
+    return k
 
 
 def raw_pooled() -> RawTarget:
