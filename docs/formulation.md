@@ -498,6 +498,36 @@ h'(R) = \frac{v_{m+1} - v_m}{\rho_{m+1} - \rho_m} \quad \text{for } \rho_m \le R
 
 and $`0`$ outside the knots. Placing knots at block means instead of at every $`R_j`$ avoids a staircase: with a knot at every $`R_j`$, the slope would be zero inside each block and very large across the narrow gap between blocks.
 
+### Evaluation
+
+A fitted curve is scored on one year of slots. Every error is in £/MWh: each prediction is turned back into a price, $`\hat\pi_t = k_t\,h(R_t)`$ for the fuel-adjusted target and $`h(R_t)`$ for the raw one, which is the same formula with $`k_t = 1`$. Censored slots have no exact price, so they are left out of every error.
+
+**Level.** The residual of an exact slot is
+
+```math
+\varepsilon_t = \pi_t - k_t\,h(R_t),
+```
+
+and the RMSE is $`\sqrt{\operatorname{mean}_t \varepsilon_t^2}`$, overall, by season (DJF, MAM, JJA, SON) and by Europe/London hour of day. The same $`\varepsilon_t`$ over the training slots are the residuals saved for anchoring.
+
+**Slope.** Later milestones move load and read off the price change, so they rely on the slope more than the level. For two consecutive exact slots half an hour apart,
+
+```math
+\Delta\pi_t = \pi_{t+1} - \pi_t \quad\text{is compared with}\quad k_t\,h'(R_t)\,\Delta R_t, \qquad \Delta R_t = R_{t+1} - R_t,
+```
+
+and the slope error is the RMSE of their difference, $`d_t`$.
+
+**Where batteries operate.** An uncoordinated fleet is run over the training years at the Agile prices of those days. Let $`n_t`$ be its net battery power, the sum over homes of import minus demand: positive while charging, negative while discharging. Each slot is weighted by $`w_t = \lvert n_t \rvert`$, on the charging side when $`n_t > 0`$ and the discharging side when $`n_t < 0`$. Each side reports
+
+```math
+\sqrt{\frac{\sum_t w_t\, d_t^2}{\sum_t w_t}} \quad\text{and}\quad \frac{\sum_t w_t\, k_t\, h'(R_t)}{\sum_t w_t},
+```
+
+the weighted slope error over the slope pairs, and the weighted mean slope over every slot. Censored slots count towards the mean slope, because it needs no price. The spread between families of that mean slope shows how much they disagree where batteries actually work.
+
+**Sanity.** $`h'(R)`$ is checked on a 200-point grid over the training range of $`R`$: its minimum should not be negative. $`h`$ and $`h'`$ are also reported at the lowest $`R`$, which is negative, and at the highest.
+
 ## Later extensions
 
 These are not part of the model above.
