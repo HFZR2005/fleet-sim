@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -319,6 +320,29 @@ def test_target_round_trips(target_name: str, price: float) -> None:
     target = TARGETS[target_name]
     obs = _observation(datetime(2024, 6, 15, tzinfo=UTC), price, cost=31.7)
     assert target.to_price(target.to_target(obs), obs) == pytest.approx(price)
+
+
+@pytest.mark.parametrize("target_name", sorted(TARGETS))
+def test_target_maps_price_bounds_to_target_bounds(target_name: str) -> None:
+    """Every target is increasing in π, so price bounds map to y bounds.
+
+    An exact slot gives (y, y); a censored π in [50, 80] gives
+    (y(50), y(80)) with y(50) < y(80); no upper bound gives (y(50), ∞).
+    """
+    target = TARGETS[target_name]
+    stamp = datetime(2024, 6, 15, tzinfo=UTC)
+
+    def y(price: float) -> float:
+        return target.to_target(_observation(stamp, price, cost=31.7))
+
+    exact = _observation(stamp, 50.0, cost=31.7)
+    interval = _observation(stamp, 50.0, censored=True, upper=80.0, cost=31.7)
+    right = _observation(stamp, 50.0, censored=True, cost=31.7)
+
+    assert target.to_target_bounds(exact) == (y(50.0), y(50.0))
+    assert target.to_target_bounds(interval) == (y(50.0), y(80.0))
+    assert y(50.0) < y(80.0)
+    assert target.to_target_bounds(right) == (y(50.0), math.inf)
 
 
 @pytest.mark.parametrize("cost", [0.0, -5.0])

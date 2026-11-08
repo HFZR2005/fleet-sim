@@ -17,7 +17,6 @@ from fleet_sim.prices.curves import FAMILIES, FittedCurve, PriceCurve
 from fleet_sim.prices.dataset import (
     PriceDataset,
     build_dataset,
-    exact_only,
     final_test_split,
     selection_data,
     selection_folds,
@@ -144,13 +143,13 @@ def _finalise(config: CalibrationConfig) -> None:
 
 
 def _load_dataset(config: CalibrationConfig) -> PriceDataset:
-    """Build and print the dataset, then keep exact slots for fitting.
+    """Build and print the dataset.
 
-    Fitting doesn't use bounds yet, so censored slots are left out here.
+    Censored slots stay in: fitting uses their price bounds.
     """
     dataset = build_dataset(config)
     _print_dataset(dataset)
-    return exact_only(dataset)
+    return dataset
 
 
 def _fit_and_evaluate(
@@ -177,10 +176,10 @@ def _fit_and_evaluate(
 
 
 def _fit(family: PriceCurve, target: Target, data: PriceDataset) -> FittedCurve:
-    """Fit ``family`` to ``(R, y)`` pairs taken from ``data``."""
+    """Fit ``family`` to residual load and bounds on ``y`` from ``data``."""
     r = [obs.residual_load_gw for obs in data.observations]
-    y = [target.to_target(obs) for obs in data.observations]
-    return family.fit(r, y)
+    bounds = [target.to_target_bounds(obs) for obs in data.observations]
+    return family.fit(r, [b[0] for b in bounds], [b[1] for b in bounds])
 
 
 def _print_dataset(dataset: PriceDataset) -> None:

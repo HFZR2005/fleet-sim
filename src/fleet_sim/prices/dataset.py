@@ -262,8 +262,8 @@ def build_dataset(config: CalibrationConfig) -> PriceDataset:
 def exact_only(dataset: PriceDataset) -> PriceDataset:
     """The dataset without its censored observations; drop counts unchanged.
 
-    The one place censored slots are removed before fitting or evaluation.
-    Temporary: remove it once fitting supports bounds.
+    For looking at residuals, which only exact slots have.  Fitting uses
+    every slot, censored ones as bounds.
     """
     return PriceDataset(
         observations=[obs for obs in dataset.observations if not obs.censored],

@@ -406,24 +406,40 @@ where $`h`$ is a curve from one of the families below and $`\varepsilon_i`$ is n
 
 The price is recovered as $`\pi = k\, h(R)`$, with $`k = 1`$ for the raw target.
 
+Some slots are censored: the retail rate was capped, so $`\pi_i`$ is known only to lie in $`[\pi_i^-, \pi_i^+]`$, with $`\pi_i^+ = \infty`$ when only a lower bound is known. Both targets are increasing in $`\pi`$ (the fuel-adjusted one because $`k_i > 0`$), so they map these to bounds $`[l_i, u_i]`$ on $`y_i`$. For the fuel-adjusted target, $`[l_i, u_i] = [\pi_i^- / k_i,\ \pi_i^+ / k_i]`$. An exact slot has $`l_i = u_i = y_i`$.
+
 ### Fitting objective
 
-A family's parameters $`\theta`$ are chosen by least squares:
+The noise is normal with one constant scale, $`y_i = h_\theta(R_i) + \varepsilon_i`$ with $`\varepsilon_i \sim N(0, \sigma^2)`$ (ADR-0003). A family's parameters $`\theta`$ and $`\sigma`$ are chosen together by maximising the censored log-likelihood
 
 ```math
-\hat\theta = \arg\min_\theta \sum_i \bigl(y_i - h_\theta(R_i)\bigr)^2.
+\ell(\theta, \sigma) = \sum_{i \,\text{exact}} \Bigl[\log \phi\Bigl(\frac{y_i - h_\theta(R_i)}{\sigma}\Bigr) - \log \sigma\Bigr] + \sum_{i \,\text{censored}} \log\Bigl[\Phi\Bigl(\frac{u_i - h_\theta(R_i)}{\sigma}\Bigr) - \Phi\Bigl(\frac{l_i - h_\theta(R_i)}{\sigma}\Bigr)\Bigr],
 ```
 
-The cubic, signed quadratic and cubic with offset are linear in their parameters, $`h_\theta(R) = x(R)^\top \theta`$ for a feature vector $`x(R)`$. Setting the gradient to zero gives the normal equations $`X^\top X \hat\theta = X^\top y`$, where row $`i`$ of $`X`$ is $`x(R_i)^\top`$. The exponential is not linear in $`\gamma`$ and is fitted iteratively. The isotonic family has no fixed formula: it minimises the same sum over every non-decreasing $`h`$.
+where $`\phi`$ and $`\Phi`$ are the standard normal density and distribution function, and $`\Phi(\infty) = 1`$. An exact slot contributes the density of its residual. A censored slot contributes the probability that $`y_i`$ lies within its bounds, so it still counts as evidence that the price was at least $`l_i`$, instead of being dropped. This is Tobit regression, generalised to any curve and to interval censoring.
+
+The interval term is a difference of two probabilities that can both round to 1 or to 0. It is computed as $`\log S(a) + \log\bigl(1 - S(b)/S(a)\bigr)`$ with $`S = 1 - \Phi`$ when $`a > 0`$, and as $`\log \Phi(b) + \log\bigl(1 - \Phi(a)/\Phi(b)\bigr)`$ otherwise, with each ratio formed from a difference of logs.
+
+**No censored slots.** Then $`\ell = -\frac{1}{2\sigma^2}\sum_i \bigl(y_i - h_\theta(R_i)\bigr)^2 - n \log \sigma + \text{const}`$. For any $`\sigma`$ this is maximised over $`\theta`$ by least squares,
+
+```math
+\hat\theta = \arg\min_\theta \sum_i \bigl(y_i - h_\theta(R_i)\bigr)^2,
+```
+
+and then over $`\sigma`$ by $`\hat\sigma^2 = \frac{1}{n} \sum_i \bigl(y_i - h_{\hat\theta}(R_i)\bigr)^2`$. The least-squares estimates in the table below are therefore the answer when nothing is censored.
+
+**With censored slots** there is no closed form. The least-squares fit to the lower bounds $`l_i`$ is the start, and $`\sigma`$ starts at its RMS residual. The mean of $`-\ell`$ is minimised by BFGS (`scipy.optimize.minimize`) over $`\theta_j / \lvert\theta_j^{\text{start}}\rvert`$ and $`\log \sigma`$. Dividing by the start puts every coordinate near 1 whatever its units, and $`\log \sigma`$ keeps $`\sigma`$ positive.
+
+The cubic, signed quadratic and cubic with offset are linear in their parameters, $`h_\theta(R) = x(R)^\top \theta`$ for a feature vector $`x(R)`$. For them, setting the gradient of the sum of squares to zero gives the normal equations $`X^\top X \hat\theta = X^\top y`$, where row $`i`$ of $`X`$ is $`x(R_i)^\top`$. The exponential is not linear in $`\gamma`$, so its least-squares fit is itself iterative. The isotonic family has no fixed formula: it minimises the same sum over every non-decreasing $`h`$.
 
 ### Families
 
-| Family | $`h(R)`$ | $`h'(R)`$ | Estimate |
+| Family | $`h(R)`$ | $`h'(R)`$ | Least-squares estimate |
 | --- | --- | --- | --- |
 | Cubic | $`a R^3`$ | $`3 a R^2`$ | $`\hat a = \sum_i y_i R_i^3 \big/ \sum_i R_i^6`$ |
 | Signed quadratic | $`a\, \operatorname{sgn}(R)\, R^2 = a R \lvert R\rvert`$ | $`2 a \lvert R\rvert`$ | $`\hat a = \sum_i y_i R_i \lvert R_i\rvert \big/ \sum_i R_i^4`$ |
 | Cubic with offset | $`a_0 + a_1 R + a_3 R^3`$ | $`a_1 + 3 a_3 R^2`$ | Normal equations with $`x(R) = (1, R, R^3)`$ |
-| Exponential | $`\alpha + \beta e^{\gamma R}`$ | $`\beta \gamma e^{\gamma R}`$ | Iterative, from a profiled start (below) |
+| Exponential | $`\alpha + \beta \, (e^{\gamma R} - 1) / \gamma`$, and $`\alpha + \beta R`$ at $`\gamma = 0`$ | $`\beta e^{\gamma R}`$ | Iterative, from a profiled start (below) |
 | Isotonic | Non-decreasing, linear between knots | Finite difference between knots | Pool adjacent violators (below) |
 
 For the one-parameter families, $`X`$ is a single column $`x_i`$, so the normal equations reduce to $`\hat a = \sum_i x_i y_i / \sum_i x_i^2`$. That is $`x_i = R_i^3`$ for the cubic and $`x_i = R_i \lvert R_i\rvert`$ for the signed quadratic, whose square is $`R_i^4`$. The estimate is undefined when every $`R_i = 0`$. The cubic with offset needs at least three distinct $`R_i`$ for $`X^\top X`$ to be invertible.
@@ -432,13 +448,15 @@ The cubic and the signed quadratic pass through the origin, and both are odd fun
 
 ### Exponential
 
-The sum of squares is minimised over $`(\alpha, \beta, \gamma)`$ by Levenberg–Marquardt (`scipy.optimize.curve_fit`), which needs a starting point. For fixed $`\gamma`$ the model is linear in $`(\alpha, \beta)`$ with features $`x(R) = (1, e^{\gamma R})`$, so the normal equations give the best $`(\alpha, \beta)`$ exactly. The starting point is the best of these over a grid
+The exponential is written as $`h(R) = \alpha + \beta\,(e^{\gamma R} - 1)/\gamma`$, so $`h(0) = \alpha`$ and $`h'(0) = \beta`$. As $`\gamma \to 0`$ it tends to the straight line $`\alpha + \beta R`$, which is its value at $`\gamma = 0`$. The family is the same set of curves as $`\alpha' + \beta' e^{\gamma R}`$ with $`\alpha' = \alpha - \beta/\gamma`$ and $`\beta' = \beta / \gamma`$, plus that line. The other form cannot reach the line, and passing between concave ($`\gamma < 0`$) and convex ($`\gamma > 0`$) curves needs $`\beta' \to \pm\infty`$. Censored fits to the raw price head exactly there. $`(e^{\gamma R} - 1)`$ is computed with `expm1`, so it stays accurate for small $`\gamma R`$.
+
+The sum of squares is minimised over $`(\alpha, \beta, \gamma)`$ by Levenberg–Marquardt (`scipy.optimize.curve_fit`), which needs a starting point. For fixed $`\gamma`$ the model is linear in $`(\alpha, \beta)`$ with features $`x(R) = \bigl(1, (e^{\gamma R} - 1)/\gamma\bigr)`$, so the normal equations give the best $`(\alpha, \beta)`$ exactly. The starting point is the best of these over a grid
 
 ```math
 \gamma = \pm \frac{c}{\max_i R_i - \min_i R_i}, \qquad c \in \{10^{-1}, \dots, 10^{1}\} \text{ (21 log-spaced values)}.
 ```
 
-Dividing by the range of $`R`$ keeps $`\gamma R`$ of order one whatever the units. $`\gamma = 0`$ is left out because $`e^{\gamma R}`$ is then constant and the same feature as $`\alpha`$. The fit needs at least three distinct $`R_i`$.
+Dividing by the range of $`R`$ keeps $`\gamma R`$ of order one whatever the units. $`\gamma = 0`$ is left out of the grid so that every start has a scale for $`\gamma`$, which the likelihood search divides by. The fit can still reach it. The fit needs at least three distinct $`R_i`$. With censored slots, this least-squares fit to the lower bounds is the start for the likelihood.
 
 ### Isotonic
 
