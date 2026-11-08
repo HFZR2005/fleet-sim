@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from fleet_sim.models.prices import GSP_REGIONS
 
@@ -38,6 +38,33 @@ class AgileVersion(BaseModel):
     def cap_positive(cls, value: float) -> float:
         if value <= 0:
             raise ValueError(f"cap must be positive (got {value})")
+        return value
+
+
+class EpgAdjustment(BaseModel):
+    """One quarter of the Energy Price Guarantee discount on Agile rates.
+
+    Dates are UK local and inclusive.  ``discount_exc_vat_p_per_kwh`` is
+    None when the data doesn't reveal the discount.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    start: date
+    end: date
+    discount_exc_vat_p_per_kwh: float | None
+
+    @model_validator(mode="after")
+    def start_not_after_end(self) -> EpgAdjustment:
+        if self.start > self.end:
+            raise ValueError(f"start {self.start} is after end {self.end}")
+        return self
+
+    @field_validator("discount_exc_vat_p_per_kwh")
+    @classmethod
+    def discount_positive(cls, value: float | None) -> float | None:
+        if value is not None and value <= 0:
+            raise ValueError(f"discount must be positive (got {value})")
         return value
 
 
@@ -126,6 +153,31 @@ REGION_PARAMS: dict[str, RegionParams] = {
 
 assert set(REGION_PARAMS) == GSP_REGIONS
 
+# Measured from region C AGILE-22-08-31 rates; see docs/data/agile.md
+# §Energy Price Guarantee.  Other regions have their own values, not yet measured.
+EPG_ADJUSTMENTS: list[EpgAdjustment] = [
+    # 57.2817 = 74.28 (the 78p cap) − 16.9983.
+    EpgAdjustment(
+        start=date(2022, 10, 1),
+        end=date(2022, 12, 31),
+        discount_exc_vat_p_per_kwh=16.9983,
+    ),
+    EpgAdjustment(
+        start=date(2023, 1, 1),
+        end=date(2023, 3, 31),
+        discount_exc_vat_p_per_kwh=None,
+    ),
+    EpgAdjustment(
+        start=date(2023, 4, 1),
+        end=date(2023, 6, 30),
+        discount_exc_vat_p_per_kwh=None,
+    ),
+]
+_EPG_REGIONS = frozenset({"C"})
+_EPG_FLOOR_EXC_VAT_P_PER_KWH = 34.0926
+# Also matches the 34.0927 rounding variant, but not a 2dp rate like 34.09.
+_EPG_FLOOR_TOLERANCE_P_PER_KWH = 0.001
+
 
 def is_peak(settlement_start: datetime) -> bool:
     """True when the slot falls in the 4–7 pm UK-local peak window.
@@ -163,17 +215,43 @@ def invert_agile(
     region: str,
     peak: bool,
     version: AgileVersion,
+    settlement_start: datetime,
 ) -> tuple[float, bool]:
     """Inverse formula: exc-VAT retail rate → wholesale.
 
     Returns ``(wholesale_p_per_kwh, capped)``.  When *capped* is True the
     returned wholesale is a lower bound, not the true price.
 
-    See ``docs/data/agile.md §Inversion``.
+    During the Energy Price Guarantee the billed rate was::
+
+        billed = formula                    if formula ≤ floor
+        billed = max(formula − D, floor)    otherwise
+
+    so a rate at the floor is flagged as capped, and a rate above it has D
+    added back before inversion (or is flagged when D is unknown).
+
+    See ``docs/data/agile.md §Inversion`` and ``§Energy Price Guarantee``.
     """
     params = _require_region_params(region)
+    epg_capped = False
+    epg = _epg_adjustment(settlement_start)
+    if epg is not None:
+        if region.upper() not in _EPG_REGIONS:
+            raise ValueError(
+                f"EPG adjustment for region {region!r} is unknown "
+                f"(measured only for {sorted(_EPG_REGIONS)}); "
+                f"can't invert {settlement_start.isoformat()}"
+            )
+        floor = _EPG_FLOOR_EXC_VAT_P_PER_KWH
+        if value_exc_vat > floor - _EPG_FLOOR_TOLERANCE_P_PER_KWH:
+            discount = epg.discount_exc_vat_p_per_kwh
+            at_floor = value_exc_vat < floor + _EPG_FLOOR_TOLERANCE_P_PER_KWH
+            if at_floor or discount is None:
+                epg_capped = True
+            else:
+                value_exc_vat += discount
     cap = version.cap_exc_vat_p_per_kwh
-    capped = value_exc_vat >= cap - _CAP_TOLERANCE_P_PER_KWH
+    capped = epg_capped or value_exc_vat >= cap - _CAP_TOLERANCE_P_PER_KWH
     adder = params.peak_adder_p_per_kwh if peak else 0.0
     wholesale_p = (value_exc_vat - adder) / params.multiplier
     return (wholesale_p, capped)
@@ -223,6 +301,14 @@ def version_date_ranges(
         spans.append((version, cursor, chunk_end))
         cursor = chunk_end + timedelta(days=1)
     return spans
+
+
+def _epg_adjustment(settlement_start: datetime) -> EpgAdjustment | None:
+    day = settlement_start.astimezone(_LONDON).date()
+    for epg in EPG_ADJUSTMENTS:
+        if epg.start <= day <= epg.end:
+            return epg
+    return None
 
 
 def _require_region_params(region: str) -> RegionParams:
