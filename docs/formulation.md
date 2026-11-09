@@ -526,6 +526,10 @@ and the slope error is the RMSE of their difference, $`d_t`$.
 
 the weighted slope error over the slope pairs, and the weighted mean slope over every slot. Censored slots count towards the mean slope, because it needs no price. The spread between families of that mean slope shows how much they disagree where batteries actually work.
 
+**Censored slots.** Two scores use the slots that the errors above leave out. The held-out log-likelihood is $`\ell(\theta, \sigma) / N`$ over every slot of the year, exact and censored, with the fitted $`\theta`$ and $`\sigma`$: the fitting objective, evaluated on data the curve did not see. It is in target units, so it compares families of one target but not the raw target with the fuel-adjusted one. The hit rate is the share of censored slots with $`l_t \le h(R_t) \le u_t`$, that is, whose predicted price lies within the slot's price bounds.
+
+**Brackets.** To show how much the treatment of censored slots moves a curve, each family is fitted to each training year alone three ways: with censored slots dropped, with each taken as exactly its lower bound, and by the censored likelihood. Each fit reports its parameters and $`h'(R_{95})`$, the slope at the year's 95th percentile of residual load, where most censored slots are.
+
 **Sanity.** $`h'(R)`$ is checked on a 200-point grid over the training range of $`R`$: its minimum should not be negative. $`h`$ and $`h'`$ are also reported at the lowest $`R`$, which is negative, and at the highest.
 
 ## Later extensions

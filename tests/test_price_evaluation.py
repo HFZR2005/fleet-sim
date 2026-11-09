@@ -12,11 +12,13 @@ from fleet_sim.data.source import PriceSource
 from fleet_sim.models.frames import Frame, HomeFrame
 from fleet_sim.models.prices import PriceSeries, london_day_bounds_utc
 from fleet_sim.models.scenario import Scenario
-from fleet_sim.prices.curves import CubicFit, CubicOffsetFit, FittedCurve
+from fleet_sim.prices.curves import Cubic, CubicFit, CubicOffsetFit, FittedCurve
 from fleet_sim.prices.dataset import PriceDataset, PriceObservation
 from fleet_sim.prices.evaluation import (
+    Bracket,
     EvaluationReport,
     FitResult,
+    bracket,
     comparison_table,
     evaluate,
     residuals,
@@ -30,14 +32,20 @@ _SLOTS = settlement_periods_utc(date(2024, 6, 15))
 
 
 def _observation(
-    i: int, load: float, price: float, *, cost: float = 1.0, censored: bool = False
+    i: int,
+    load: float,
+    price: float,
+    *,
+    cost: float = 1.0,
+    censored: bool = False,
+    upper: float | None = None,
 ) -> PriceObservation:
     stamp = _SLOTS[i]
     return PriceObservation(
         settlement_start=stamp,
         wholesale_price_gbp_per_mwh=price,
         censored=censored,
-        wholesale_upper_gbp_per_mwh=None,
+        wholesale_upper_gbp_per_mwh=upper,
         residual_load_gw=load,
         fuel_cost_gbp_per_mwh=cost,
         year=stamp.year,
@@ -114,7 +122,7 @@ def test_evaluate_hand_worked(
     Sanity over R ∈ [1, 3.5]: min slope h′(1) = 3; h(3.5) = 42.875,
       h′(3.5) = 36.75.
     """
-    result = _evaluate(CubicFit(a=1.0, sigma=0.0), five_slots, charging)
+    result = _evaluate(CubicFit(a=1.0, sigma=1.0), five_slots, charging)
 
     assert result.year == 2024
     assert result.exact_slots == 4
@@ -148,22 +156,124 @@ def test_comparison_table_flags_a_falling_curve_and_shows_the_spread(
       charging h′(1) = −0.97;
       discharging (3·h′(2) + h′(3))/4 = (3·(−0.88) + (−0.73))/4 = −0.8425.
     Spreads: 3 − (−0.97) = 3.97 and 15.75 − (−0.8425) = 16.5925.
-    h′(1) < 0, so the second row is flagged.
+    h′(1) < 0, so the second row is flagged.  Brackets for 2021 get a
+    table of their own, ahead of the other years.
     """
-    falling = CubicOffsetFit(a0=0.0, a1=-1.0, a3=0.01, sigma=0.0)
+    falling = CubicOffsetFit(a0=0.0, a1=-1.0, a3=0.01, sigma=1.0)
+    brackets = [
+        Bracket(
+            model_name="raw_pooled/cubic",
+            curve_family="cubic",
+            target_name="raw_pooled",
+            year=year,
+            method="censored",
+            censored_slots=10,
+            r95_gw=30.0,
+            slope_at_r95=2.5,
+            parameters={"a": 0.001, "sigma": 50.0},
+        )
+        for year in (2024, 2021)
+    ]
     report = EvaluationReport(
         results=[
-            _evaluate(CubicFit(a=1.0, sigma=0.0), five_slots, charging),
+            _evaluate(CubicFit(a=1.0, sigma=1.0), five_slots, charging),
             _evaluate(falling, five_slots, charging),
-        ]
+        ],
+        brackets=brackets,
     )
 
     table = comparison_table(report)
 
     rows = [line for line in table.splitlines() if line.startswith("| raw_pooled/")]
+    assert "| RMSE (exact) |" in table
     assert "⚠" not in rows[0]
-    assert rows[1].endswith("⚠ |")
+    assert "⚠ |" in rows[1]
     assert "| raw_pooled | 2024 | 3.97 | 16.59 |" in table
+    row_2021 = (
+        "| raw_pooled/cubic | 2021 | 10 | censored | 30 | 2.5 | a=0.001, sigma=50 |"
+    )
+    assert table.index("### 2021") < table.index(row_2021)
+    assert table.index(row_2021) < table.index("### Other years")
+    assert table.index("### Other years") < table.index(
+        "| raw_pooled/cubic | 2024 | 10"
+    )
+
+
+def test_evaluate_scores_censored_slots_by_hand() -> None:
+    """h(R) = R³ with σ = 2, raw target.  One slot of each kind at h = 0.
+
+    slot  R  bounds on π   z                log-likelihood
+    0     1  1 (exact)     (1 − 1)/2 = 0    −½·log 2π − log 2 = −1.61209
+    1     0  0 (exact)     0                −1.61209
+    2     0  [1, ∞)        P(Z ≥ 0.5)       log 0.308538 = −1.17591
+    3     0  [−2, 2]       P(−1 ≤ Z ≤ 1)    log 0.682689 = −0.38172
+    Mean over 4 slots: −4.78181 / 4 = −1.19545.
+    Hit rate: slot 2 predicts 0 < 1, a miss; slot 3 predicts 0 ∈ [−2, 2],
+    a hit.  1 of 2.
+    """
+    data = PriceDataset(
+        observations=[
+            _observation(0, 1.0, 1.0),
+            _observation(1, 0.0, 0.0),
+            _observation(2, 0.0, 1.0, censored=True),
+            _observation(3, 0.0, -2.0, censored=True, upper=2.0),
+        ],
+        drops=[],
+    )
+    no_fleet = FleetCharging(
+        scenario="test.toml",
+        start=date(2024, 6, 15),
+        end=date(2024, 6, 15),
+        slot_start_utc=[],
+        net_battery_kw=[],
+        skipped_days=[],
+    )
+
+    result = _evaluate(CubicFit(a=1.0, sigma=2.0), data, no_fleet)
+
+    assert result.censored_slots == 2
+    assert result.log_likelihood_per_slot == pytest.approx(-1.19545, abs=1e-5)
+    assert result.hit_rate == pytest.approx(0.5)
+
+
+def test_bracket_fits_one_year_three_ways() -> None:
+    """Cubic a·R³ on four slots; slot 2 is censored, π ≥ 4.
+
+    R = [1, 2, 2, 1], π = [1, 8, ≥4, 2].
+    dropped:     â = Σ πR³ / Σ R⁶ = (1 + 64 + 2) / (1 + 64 + 1) = 67/66
+    lower_bound: â = (67 + 4·8) / (66 + 64) = 99/130
+    censored:    π ≥ 4 is only a floor, so â rises above 99/130.
+    R95 of [1, 1, 2, 2] (linear interpolation) is 2, so the slope there
+    is 3â·2² = 12â.
+    """
+    data = PriceDataset(
+        observations=[
+            _observation(0, 1.0, 1.0),
+            _observation(1, 2.0, 8.0),
+            _observation(2, 2.0, 4.0, censored=True),
+            _observation(3, 1.0, 2.0),
+        ],
+        drops=[],
+    )
+
+    rows = bracket(
+        Cubic(),
+        data,
+        TARGETS["raw_pooled"],
+        model_name="raw_pooled/cubic",
+        curve_family="cubic",
+        target_name="raw_pooled",
+    )
+
+    by_method = {row.method: row for row in rows}
+    assert by_method.keys() == {"dropped", "lower_bound", "censored"}
+    assert by_method["dropped"].parameters["a"] == pytest.approx(67 / 66)
+    assert by_method["lower_bound"].parameters["a"] == pytest.approx(99 / 130)
+    assert by_method["censored"].parameters["a"] > 99 / 130
+    for row in rows:
+        assert row.censored_slots == 1
+        assert row.r95_gw == pytest.approx(2.0)
+        assert row.slope_at_r95 == pytest.approx(12 * row.parameters["a"])
 
 
 def test_residuals_on_the_fuel_adjusted_target() -> None:
