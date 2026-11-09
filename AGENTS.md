@@ -101,6 +101,6 @@ Mechanics:
 
 ## Do not
 
-- Do not commit downloaded data; it is cached outside the repo (see `.gitignore`).
+- Do not commit downloaded data; it is cached outside the repo (see `.gitignore`). Derived calibration files under `calibration/` (e.g. `price_curves.json`) are committed.
 - Do not set arguments explicitly when the library default is correct.
 - Do not silence type or lint errors with ignores unless the issue says to.

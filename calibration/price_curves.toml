@@ -26,4 +26,4 @@ robustness = ""
 
 [output]
 results_dir = "results/price-curves"
-parameters_file = "calibration/parameters.json"
+parameters_file = "calibration/price_curves.json"
