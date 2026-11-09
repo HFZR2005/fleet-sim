@@ -35,7 +35,11 @@ from fleet_sim.prices.evaluation import (
     evaluate,
     residuals,
 )
-from fleet_sim.prices.figures import plot_evaluation_summary, plot_price_vs_residual
+from fleet_sim.prices.figures import (
+    EVALUATION_FIGURES,
+    load_evaluation,
+    plot_price_vs_residual,
+)
 from fleet_sim.prices.fleet_weights import (
     FleetCharging,
     fleet_charging,
@@ -111,10 +115,11 @@ def _compare(config: CalibrationConfig) -> None:
             save_figure(fig, output_dir / f"scatter_{model_name.replace('/', '_')}")
 
     report = EvaluationReport(results=all_results, brackets=_brackets(config, folds))
-    save_figure(plot_evaluation_summary(report), output_dir / "comparison")
-    (output_dir / "evaluation.json").write_text(
-        report.model_dump_json(indent=2) + "\n", encoding="utf-8"
-    )
+    report_path = output_dir / "evaluation.json"
+    report_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    saved = load_evaluation(report_path)
+    for stem, plot in EVALUATION_FIGURES.items():
+        save_figure(plot(saved), output_dir / stem)
     table = comparison_table(report)
     (output_dir / "comparison.md").write_text(table, encoding="utf-8")
     print(table)

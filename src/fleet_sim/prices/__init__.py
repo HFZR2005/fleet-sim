@@ -28,7 +28,14 @@ from fleet_sim.prices.dataset import (
     summarise,
 )
 from fleet_sim.prices.evaluation import EvaluationReport, FitResult, evaluate
-from fleet_sim.prices.figures import plot_evaluation_summary, plot_price_vs_residual
+from fleet_sim.prices.figures import (
+    load_evaluation,
+    plot_fleet_slopes,
+    plot_hit_rate,
+    plot_level_error,
+    plot_price_vs_residual,
+    plot_r95_brackets,
+)
 from fleet_sim.prices.response import price_response
 from fleet_sim.prices.targets import TARGETS, Target
 
@@ -62,8 +69,12 @@ __all__ = [
     "exact_only",
     "final_test_split",
     "load_config",
-    "plot_evaluation_summary",
+    "load_evaluation",
+    "plot_fleet_slopes",
+    "plot_hit_rate",
+    "plot_level_error",
     "plot_price_vs_residual",
+    "plot_r95_brackets",
     "price_response",
     "selection_data",
     "selection_folds",
