@@ -90,7 +90,7 @@ def test_dataset_figures_render_without_stubs(tmp_path: Path) -> None:
             {"fuel_adjusted/cubic": residuals(curves["cubic"], dataset, target)},
         ),
         "anchoring": plot_anchoring(
-            day, curves, target, [2.0] * 10 + [0.0] * 38, region="C"
+            day, curves, "fuel_adjusted", [2.0] * 10 + [0.0] * 38, region="C"
         ),
     }
     for stem, figure in figures.items():

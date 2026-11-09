@@ -158,7 +158,7 @@ def _compare(config: CalibrationConfig, residual_models: list[str]) -> None:
         figure = plot_anchoring(
             day,
             fits["fuel_adjusted"],
-            TARGETS["fuel_adjusted"],
+            "fuel_adjusted",
             added,
             region=config.data.agile_regions[0],
         )
