@@ -532,6 +532,28 @@ the weighted slope error over the slope pairs, and the weighted mean slope over 
 
 **Sanity.** $`h'(R)`$ is checked on a 200-point grid over the training range of $`R`$: its minimum should not be negative. $`h`$ and $`h'`$ are also reported at the lowest $`R`$, which is negative, and at the highest.
 
+### Anchoring
+
+A fleet adds load $`b_t`$ (GW) to slot $`t`$ of a historical day. The new wholesale price keeps the slot's residual $`\varepsilon_t`$ and moves along the fitted curve:
+
+```math
+\pi'_t = k_t\, h(R_t + b_t) + \varepsilon_t = \pi_t + k_t \bigl[h(R_t + b_t) - h(R_t)\bigr].
+```
+
+For the raw target $`k_t = 1`$ and the curve is in £/MWh, so this is $`\pi'_t = \pi_t + f(R_t + b_t) - f(R_t)`$. With $`b_t = 0`$ it returns the historical price exactly.
+
+Holding $`\varepsilon_t`$ at its historical value assumes that what the curve does not explain (outages, interconnector flows, bidding, anything else not in $`R_t`$ and $`k_t`$) would have happened the same way whatever the fleet did. Only the part of the price that the curve explains responds to the added load.
+
+**Censored slots.** A censored slot has no exact $`\pi_t`$, only bounds $`[\pi_t^-, \pi_t^+]`$. It is anchored on the fitted price clipped to those bounds,
+
+```math
+\hat\pi_t = \min\bigl(\max(k_t\, h(R_t),\ \pi_t^-),\ \pi_t^+\bigr), \qquad \pi'_t = \hat\pi_t + k_t \bigl[h(R_t + b_t) - h(R_t)\bigr],
+```
+
+with $`\pi_t^+ = \infty`$ when only a lower bound is known. The curve's own prediction is the best guess of the price, and clipping keeps the anchor consistent with what was observed. The implied residual is zero when the prediction lies within the bounds.
+
+**Back to Agile rates.** Each $`\pi'_t`$ is turned into an Agile import rate by the forward formula in `docs/data/agile.md`, with the same product and peak window that the inversion used, and then VAT. Days of the Energy Price Guarantee (1 October 2022 to 30 June 2023) are rejected: its discount is known only for region C in the first quarter, so the billed rate cannot be recomputed for the rest.
+
 ## Later extensions
 
 These are not part of the model above.

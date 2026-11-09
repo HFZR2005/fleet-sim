@@ -20,7 +20,7 @@ from fleet_sim.models.prices import GSP_REGIONS
 
 _LONDON = ZoneInfo("Europe/London")
 _CAP_TOLERANCE_P_PER_KWH = 0.1
-_VAT_MULTIPLIER = 1.05
+VAT_MULTIPLIER = 1.05
 
 
 class AgileVersion(BaseModel):
@@ -123,17 +123,17 @@ AGILE_VERSIONS: list[AgileVersion] = [
     ),
     AgileVersion(
         product_code="AGILE-22-08-31",
-        cap_exc_vat_p_per_kwh=round(78 / _VAT_MULTIPLIER, 2),
+        cap_exc_vat_p_per_kwh=round(78 / VAT_MULTIPLIER, 2),
         available_from=date(2022, 8, 1),
     ),
     AgileVersion(
         product_code="AGILE-22-07-22",
-        cap_exc_vat_p_per_kwh=round(55 / _VAT_MULTIPLIER, 2),
+        cap_exc_vat_p_per_kwh=round(55 / VAT_MULTIPLIER, 2),
         available_from=date(2022, 6, 1),
     ),
     AgileVersion(
         product_code="AGILE-18-02-21",
-        cap_exc_vat_p_per_kwh=round(35 / _VAT_MULTIPLIER, 2),
+        cap_exc_vat_p_per_kwh=round(35 / VAT_MULTIPLIER, 2),
         available_from=date(2018, 2, 1),
     ),
 ]
