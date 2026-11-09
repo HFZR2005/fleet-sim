@@ -10,7 +10,8 @@ Not run in CI.  Invoke with::
 
 from __future__ import annotations
 
-import json
+import hashlib
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -54,6 +55,13 @@ from fleet_sim.prices.fleet_weights import (
     fleet_charging,
     uncoordinated,
 )
+from fleet_sim.prices.parameters import (
+    CurveParameters,
+    PriceParameters,
+    Provenance,
+    SavedModel,
+    saved_curve,
+)
 from fleet_sim.prices.targets import TARGETS, Target
 from fleet_sim.stubs import (
     StubActiveError,
@@ -87,7 +95,7 @@ def main() -> None:
     if mode == "compare":
         _compare(config, sys.argv[2:])
     else:
-        _finalise(config)
+        _finalise(config, _DEFAULT_CONFIG)
 
 
 def _compare(config: CalibrationConfig, residual_models: list[str]) -> None:
@@ -281,32 +289,80 @@ def _write_residuals(
     return written
 
 
-def _finalise(config: CalibrationConfig) -> None:
-    """Fit the chosen model on all training data and write parameters."""
+def _finalise(config: CalibrationConfig, config_path: Path) -> None:
+    """Refit the chosen models and score them on the final-test year, once.
+
+    A pooled model is fitted on all training years and scored on the
+    final-test year.  A per-year model is fitted to each training year
+    and to the final-test year, and scored in-sample on the final-test
+    year, as ``compare`` scores it.  Refuses to run if the parameters
+    file exists: the final-test year is read once, and rerunning means
+    deleting that file on purpose.
+    """
     if not config.chosen.main:
         raise ValueError("[chosen] main is empty — run compare first and pick a model")
+    chosen = [config.chosen.main]
+    if config.chosen.robustness:
+        chosen.append(config.chosen.robustness)
+    params_path = Path(config.output.parameters_file)
+    if params_path.exists():
+        raise FileExistsError(
+            f"{params_path} exists, so the final test has been run; "
+            "delete it to run again"
+        )
+
     begin_stub_run()
     dataset = _load_dataset(config)
     train_data, test_data = final_test_split(dataset, config.splits)
+    charging = _fleet_charging(config, test_data)
+    final_year = config.splits.final_test_year
 
-    chosen = config.chosen.main
-    target_name, family_name = _parse_model(chosen)
-    family = FAMILIES[family_name]
-    target = TARGETS[target_name]
+    models: list[SavedModel] = []
+    for model_name in chosen:
+        target_name, family_name = _parse_model(model_name)
+        family = FAMILIES[family_name]
+        target = TARGETS[target_name]
+        split: Split
+        curve: CurveParameters | None
+        curves_by_year: dict[int, CurveParameters] | None
+        if target.per_year:
+            by_year = {
+                fold.held_out_year: _fit(family, target, fold.test)
+                for fold in selection_folds(dataset, config.splits)
+            }
+            by_year[final_year] = _fit(family, target, test_data)
+            fitted = by_year[final_year]
+            fit_train, split = test_data, "in-sample"
+            curve = None
+            curves_by_year = {y: saved_curve(c) for y, c in by_year.items()}
+        else:
+            fitted = _fit(family, target, train_data)
+            fit_train, split = train_data, "held-out"
+            curve = saved_curve(fitted)
+            curves_by_year = None
+        result = evaluate(
+            fitted,
+            fit_train,
+            test_data,
+            target,
+            charging,
+            model_name=model_name,
+            curve_family=family_name,
+            target_name=target_name,
+            split=split,
+        )
+        models.append(
+            SavedModel(
+                name=model_name,
+                target=target_name,
+                family=family_name,
+                curve=curve,
+                curves_by_year=curves_by_year,
+                final_test=result,
+            )
+        )
 
-    fit_result, _fitted = _fit_and_evaluate(
-        train_data,
-        test_data,
-        family_name,
-        target_name,
-        family,
-        target,
-        chosen,
-        _fleet_charging(config, test_data),
-        "held-out",
-    )
-
-    print(comparison_table(EvaluationReport(results=[fit_result])))
+    print(comparison_table(EvaluationReport(results=[m.final_test for m in models])))
 
     try:
         require_no_stubs()
@@ -317,13 +373,38 @@ def _finalise(config: CalibrationConfig) -> None:
             print(f"  STUB  {s}")
         raise
 
-    params_path = Path(config.output.parameters_file)
+    parameters = PriceParameters(
+        provenance=_provenance(config, config_path), models=models
+    )
     params_path.parent.mkdir(parents=True, exist_ok=True)
     params_path.write_text(
-        json.dumps(fit_result.model_dump(mode="json"), indent=2) + "\n",
-        encoding="utf-8",
+        parameters.model_dump_json(indent=2) + "\n", encoding="utf-8"
     )
     print(f"\nParameters written to {params_path}")
+
+
+def _provenance(config: CalibrationConfig, config_path: Path) -> Provenance:
+    """The data, splits and fuel-cost settings, config hash and commit."""
+    commit = _git("rev-parse", "HEAD")
+    changed = _git("status", "--porcelain", "--untracked-files=no")
+    return Provenance(
+        data_start=config.data.start,
+        data_end=config.data.end,
+        agile_regions=config.data.agile_regions,
+        splits=config.splits,
+        fuel_cost=config.fuel_cost,
+        config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest(),
+        git_commit=commit,
+        git_dirty=bool(changed),
+        run_date=date.today(),
+    )
+
+
+def _git(*args: str) -> str:
+    """Output of a git command in the repository, stripped."""
+    return subprocess.run(
+        ["git", *args], cwd=_ROOT, capture_output=True, text=True, check=True
+    ).stdout.strip()
 
 
 def _parse_model(model_name: str) -> tuple[str, str]:
