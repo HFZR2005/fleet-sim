@@ -19,10 +19,12 @@ IDENTICAL = "#b45309"
 OVERLOAD_FILL = "#ef4444"
 LIMIT_LINE = "#6b7280"
 BAND_ALPHA = 0.18
-# One colour per price-curve family, in the order of ``FAMILIES``.  Checked
-# for colour-blind separation between neighbouring bars.
 CHARGING = "#1d4e89"
 DISCHARGING = "#b45309"
+# Years are ordered, so they take steps of one sequential colour map.
+YEAR_COLOURMAP = "Blues"
+# One colour per price-curve family, in the order of ``FAMILIES``.  Checked
+# for colour-blind separation between neighbouring bars.
 FAMILY_COLOURS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4")
 
 FONT_FAMILY = "DejaVu Sans"

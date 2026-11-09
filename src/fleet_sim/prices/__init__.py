@@ -30,11 +30,15 @@ from fleet_sim.prices.dataset import (
 from fleet_sim.prices.evaluation import EvaluationReport, FitResult, evaluate
 from fleet_sim.prices.figures import (
     load_evaluation,
+    plot_anchoring,
+    plot_fits,
     plot_fleet_slopes,
+    plot_fuel_adjustment,
     plot_hit_rate,
     plot_level_error,
-    plot_price_vs_residual,
     plot_r95_brackets,
+    plot_residuals,
+    plot_slopes,
 )
 from fleet_sim.prices.response import price_response
 from fleet_sim.prices.targets import TARGETS, Target
@@ -70,11 +74,15 @@ __all__ = [
     "final_test_split",
     "load_config",
     "load_evaluation",
+    "plot_anchoring",
+    "plot_fits",
     "plot_fleet_slopes",
+    "plot_fuel_adjustment",
     "plot_hit_rate",
     "plot_level_error",
-    "plot_price_vs_residual",
     "plot_r95_brackets",
+    "plot_residuals",
+    "plot_slopes",
     "price_response",
     "selection_data",
     "selection_folds",

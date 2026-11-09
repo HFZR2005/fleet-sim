@@ -2,15 +2,19 @@
 
 Not run in CI.  Invoke with::
 
-    uv run python scripts/fit_price_curves.py compare
+    uv run python scripts/fit_price_curves.py compare [TARGET/FAMILY ...]
     uv run python scripts/fit_price_curves.py finalise
+
+``compare`` writes residuals, and plots them, for each model named after it.
 """
 
 from __future__ import annotations
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fleet_sim.data.agile_history import HistoricalAgileSource
 from fleet_sim.prices.config import CalibrationConfig, load_config
@@ -29,6 +33,7 @@ from fleet_sim.prices.evaluation import (
     EvaluationReport,
     FitResult,
     ResidualSeries,
+    SlotResidual,
     Split,
     bracket,
     comparison_table,
@@ -38,7 +43,11 @@ from fleet_sim.prices.evaluation import (
 from fleet_sim.prices.figures import (
     EVALUATION_FIGURES,
     load_evaluation,
-    plot_price_vs_residual,
+    plot_anchoring,
+    plot_fits,
+    plot_fuel_adjustment,
+    plot_residuals,
+    plot_slopes,
 )
 from fleet_sim.prices.fleet_weights import (
     FleetCharging,
@@ -58,21 +67,30 @@ _ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_CONFIG = _ROOT / "calibration" / "price_curves.toml"
 _SCENARIOS = _ROOT / "scenarios"
 _HOUSEHOLDS = _ROOT / ".cache" / "lcl" / "LCL-FullData.zip"
+_LONDON = ZoneInfo("Europe/London")
+# The anchoring example: a winter weekday outside the Energy Price
+# Guarantee, with 2 GW added overnight (00:00 to 05:00 UK time).
+_ANCHOR_DAY = date(2024, 1, 17)
+_ANCHOR_ADDED_GW = 2.0
+_ANCHOR_UNTIL_HOUR = 5
 
 
 def main() -> None:
     if len(sys.argv) < 2 or sys.argv[1] not in ("compare", "finalise"):
-        print("Usage: python scripts/fit_price_curves.py {compare|finalise}")
+        print(
+            "Usage: python scripts/fit_price_curves.py "
+            "{compare [TARGET/FAMILY ...]|finalise}"
+        )
         sys.exit(1)
     mode = sys.argv[1]
     config = load_config(_DEFAULT_CONFIG)
     if mode == "compare":
-        _compare(config)
+        _compare(config, sys.argv[2:])
     else:
         _finalise(config)
 
 
-def _compare(config: CalibrationConfig) -> None:
+def _compare(config: CalibrationConfig, residual_models: list[str]) -> None:
     """Fit and score every (family, target) model on the training years.
 
     Pooled targets are fitted on all but one year and scored on that
@@ -91,6 +109,7 @@ def _compare(config: CalibrationConfig) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     all_results: list[FitResult] = []
+    fits: dict[str, dict[str, FittedCurve]] = {}
     for family_name in config.models.families:
         family = FAMILIES[family_name]
         for target_name in config.models.targets:
@@ -110,9 +129,10 @@ def _compare(config: CalibrationConfig) -> None:
                 )
                 all_results.append(fit_result)
 
-            fitted = _fit(family, target, selection)
-            fig = plot_price_vs_residual(selection, fitted, target, title=model_name)
-            save_figure(fig, output_dir / f"scatter_{model_name.replace('/', '_')}")
+            if not target.per_year:
+                fits.setdefault(target_name, {})[family_name] = _fit(
+                    family, target, selection
+                )
 
     report = EvaluationReport(results=all_results, brackets=_brackets(config, folds))
     report_path = output_dir / "evaluation.json"
@@ -123,7 +143,31 @@ def _compare(config: CalibrationConfig) -> None:
     table = comparison_table(report)
     (output_dir / "comparison.md").write_text(table, encoding="utf-8")
     print(table)
-    _write_residuals(config, selection, folds, output_dir)
+
+    save_figure(plot_fuel_adjustment(selection), output_dir / "fuel_adjustment")
+    save_figure(plot_fits(selection, fits), output_dir / "fits")
+    save_figure(plot_slopes(selection, fits, charging), output_dir / "slopes")
+    if "fuel_adjusted" in fits:
+        day = _anchor_day(selection)
+        added = [
+            _ANCHOR_ADDED_GW
+            if o.settlement_start.astimezone(_LONDON).hour < _ANCHOR_UNTIL_HOUR
+            else 0.0
+            for o in day.observations
+        ]
+        figure = plot_anchoring(
+            day,
+            fits["fuel_adjusted"],
+            TARGETS["fuel_adjusted"],
+            added,
+            region=config.data.agile_regions[0],
+        )
+        save_figure(figure, output_dir / "anchoring")
+    model_residuals = _write_residuals(residual_models, selection, folds, output_dir)
+    if model_residuals:
+        save_figure(
+            plot_residuals(selection, model_residuals), output_dir / "residuals"
+        )
 
     stubs = active_stubs()
     if stubs:
@@ -194,21 +238,30 @@ def _fleet_charging(config: CalibrationConfig, data: PriceDataset) -> FleetCharg
     return charging
 
 
+def _anchor_day(selection: PriceDataset) -> PriceDataset:
+    """The slots of ``_ANCHOR_DAY``, a UK day, from ``selection``."""
+    return PriceDataset(
+        observations=[
+            o
+            for o in selection.observations
+            if o.settlement_start.astimezone(_LONDON).date() == _ANCHOR_DAY
+        ],
+        drops=[],
+    )
+
+
 def _write_residuals(
-    config: CalibrationConfig,
+    models: list[str],
     selection: PriceDataset,
     folds: list[Fold],
     output_dir: Path,
-) -> None:
-    """Residuals on the training years for each model named in ``[chosen]``.
+) -> dict[str, list[SlotResidual]]:
+    """Residuals on the training years for each of ``models``.
 
     A per-year model is fitted to each year and its residuals joined.
     """
-    chosen = [m for m in (config.chosen.main, config.chosen.robustness) if m]
-    if not chosen:
-        print("\nNo model in [chosen] yet, so no residuals written.")
-        return
-    for model_name in chosen:
+    written: dict[str, list[SlotResidual]] = {}
+    for model_name in models:
         target_name, family_name = _parse_model(model_name)
         target = TARGETS[target_name]
         family = FAMILIES[family_name]
@@ -224,6 +277,8 @@ def _write_residuals(
             encoding="utf-8",
         )
         print(f"Residuals for {model_name} written to {path}")
+        written[model_name] = slots
+    return written
 
 
 def _finalise(config: CalibrationConfig) -> None:

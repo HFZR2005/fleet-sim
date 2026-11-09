@@ -1,48 +1,67 @@
-"""Comparison and diagnostic figures for the price-curve pipeline.
+"""Figures for the price-curve pipeline.
 
 The evaluation figures read a saved ``EvaluationReport`` (see
 ``load_evaluation``): level error, fleet-weighted slope, censored hit
-rate and the censoring brackets.  ``plot_price_vs_residual`` is still a
-stub.
+rate and the censoring brackets.  The others take the dataset and the
+fitted curves: why adjust for fuel cost, the fits, their slopes where
+the fleet operates, residuals, and what anchoring does to one day.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-import matplotlib.pyplot as plt
+import matplotlib as mpl
+import numpy as np
+import numpy.typing as npt
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
 from fleet_sim.prices.curves import FAMILIES, FittedCurve
-from fleet_sim.prices.dataset import PriceDataset
+from fleet_sim.prices.dataset import PriceDataset, PriceObservation
 from fleet_sim.prices.evaluation import (
     Bracket,
     BracketMethod,
     EvaluationReport,
     FitResult,
+    SlotResidual,
     WeightedSlope,
 )
-from fleet_sim.prices.targets import Target
-from fleet_sim.stubs import stub
+from fleet_sim.prices.fleet_weights import FleetCharging
+from fleet_sim.prices.response import price_response
+from fleet_sim.prices.targets import TARGETS, Target
 from fleet_sim.viz.style import (
+    BAND_ALPHA,
     CHARGING,
     DISCHARGING,
     EVALUATION_FIGURE_INCHES,
     FAMILY_COLOURS,
     GRIDLINE,
     INK,
+    LIMIT_LINE,
     LINE_WIDTH,
     PAPER,
     PRICE_CURVE_FIGURE_INCHES,
+    YEAR_COLOURMAP,
     apply_style,
     style_axes,
-    watermark_stub,
 )
 
+_Array = npt.NDArray[np.float64]
+_LONDON = ZoneInfo("Europe/London")
+_BIN_WIDTH = 1.0
+_MIN_BIN_POINTS = 30
+_GRID_POINTS = 200
+_SLOPE_CLIP_PERCENTILE = 98
+# The pooled targets, whose single curve over all years can be drawn.
+_CURVE_TARGETS = ("raw_pooled", "fuel_adjusted")
+_Y_LABELS = {"raw_pooled": "π (£/MWh)", "fuel_adjusted": "π / k"}
+_SLOPE_UNITS = {"raw_pooled": "£/MWh per GW", "fuel_adjusted": "per GW"}
 _GAS_CRISIS_YEAR = 2022
 _GROUP_WIDTH = 0.8
 _METHOD_MARKERS: dict[BracketMethod, tuple[str, str]] = {
@@ -58,28 +77,204 @@ def load_evaluation(path: Path) -> EvaluationReport:
     return EvaluationReport.model_validate_json(path.read_text(encoding="utf-8"))
 
 
-@stub("placeholder scatter — replace in issue #72")
-def plot_price_vs_residual(
-    dataset: PriceDataset,
-    fitted: FittedCurve,
-    target: Target,
-    *,
-    title: str = "Price vs residual load",
-) -> Figure:
-    """Scatter of target value against residual load with fitted curve.
+def plot_fuel_adjustment(dataset: PriceDataset) -> Figure:
+    """π against R by year, next to π / k against R by year.
 
-    Stub: empty axes with a STUB watermark.
+    Each year is the median of its exact slots in 1 GW bins of R, with
+    the interquartile band.  Dividing by the fuel cost k should collapse
+    the years' bands onto one curve.
     """
-    _ = dataset, fitted, target
+    years = dataset.years
+    figure, axes = _panels(2, sharey=False)
+    for year, colour in zip(years, _year_colours(len(years)), strict=True):
+        rows = [o for o in _exact(dataset) if o.year == year]
+        for ax, target_name in zip(axes, _CURVE_TARGETS, strict=True):
+            r, y = _target_values(rows, target_name)
+            _band(ax, _binned(r, y), colour, label=str(year))
+    for ax, target_name in zip(axes, _CURVE_TARGETS, strict=True):
+        ax.set_xlabel("Residual load R (GW)")
+        ax.set_ylabel(_Y_LABELS[target_name])
+    handles, _ = axes[0].get_legend_handles_labels()
+    figure.legend(handles=handles, loc="lower center", ncols=len(handles))
+    return _finish(figure)
+
+
+def plot_fits(dataset: PriceDataset, fits: dict[str, dict[str, FittedCurve]]) -> Figure:
+    """Each family's curve h(R) over binned medians, one panel per target.
+
+    ``fits`` maps target name to family to the curve fitted on
+    ``dataset``.  Medians are over exact slots in 1 GW bins, so they sit
+    low where many slots are censored, at high R.
+    """
+    figure, axes = _panels(len(fits), sharey=False)
+    for ax, (target_name, curves) in zip(axes, fits.items(), strict=True):
+        r, y = _target_values(_exact(dataset), target_name)
+        centres, _, medians, _ = _binned(r, y)
+        ax.plot(centres, medians, "o", color=LIMIT_LINE, label="Binned median")
+        grid = _grid(dataset)
+        for family, fitted in curves.items():
+            ax.plot(
+                grid,
+                [fitted.predict(x) for x in grid],
+                color=_family_colour(family),
+                linewidth=LINE_WIDTH,
+                label=family,
+            )
+        ax.set_title(target_name)
+        ax.set_xlabel("Residual load R (GW)")
+        ax.set_ylabel(_Y_LABELS[target_name])
+    handles, _ = axes[0].get_legend_handles_labels()
+    figure.legend(handles=handles, loc="lower center", ncols=len(handles))
+    return _finish(figure)
+
+
+def plot_slopes(
+    dataset: PriceDataset,
+    fits: dict[str, dict[str, FittedCurve]],
+    charging: FleetCharging,
+) -> Figure:
+    """h′(R) for each family, over where the fleet charges and discharges.
+
+    Shaded behind the curves is the distribution of R over ``dataset``'s
+    slots weighted by the fleet's net battery power |nₜ|, charging
+    (nₜ > 0) and discharging (nₜ < 0) separately, as in the evaluation.
+    It is scaled to the panel's height: it shows where, not how much.
+    The y-axis stops at the 98th percentile of the plotted slopes, so the
+    isotonic curve's spikes are cut off rather than flattening the rest.
+    """
+    net = charging.by_slot()
+    loads = np.array([o.residual_load_gw for o in dataset.observations])
+    power = np.array([net.get(o.settlement_start, 0.0) for o in dataset.observations])
+    edges = _edges(loads)
+    figure, axes = _panels(len(fits), sharey=False)
+    for ax, (target_name, curves) in zip(axes, fits.items(), strict=True):
+        grid = _grid(dataset)
+        slopes = {f: [c.slope(x) for x in grid] for f, c in curves.items()}
+        for family, values in slopes.items():
+            ax.plot(
+                grid,
+                values,
+                color=_family_colour(family),
+                linewidth=LINE_WIDTH,
+                label=family,
+            )
+        every = np.concatenate(list(slopes.values()))
+        bottom = min(0.0, float(every.min()))
+        top = 1.05 * float(np.percentile(every, _SLOPE_CLIP_PERCENTILE))
+        histograms = [
+            np.histogram(loads, edges, weights=np.clip(sign * power, 0.0, None))[0]
+            for sign in (1.0, -1.0)
+        ]
+        scale = top / max(h.max() for h in histograms)
+        for counts, colour, label in zip(
+            histograms, (CHARGING, DISCHARGING), ("Fleet charging", "Fleet discharging")
+        ):
+            ax.stairs(
+                counts * scale,
+                edges,
+                baseline=0.0,
+                fill=True,
+                color=colour,
+                alpha=BAND_ALPHA,
+                zorder=0,
+                label=label,
+            )
+        ax.set_ylim(bottom, top)
+        ax.set_title(target_name)
+        ax.set_xlabel("Residual load R (GW)")
+        ax.set_ylabel(f"h′(R) ({_SLOPE_UNITS[target_name]})")
+    handles, _ = axes[0].get_legend_handles_labels()
+    figure.legend(handles=handles, loc="lower center", ncols=4)
+    return _finish(figure, legend_rows=2)
+
+
+def plot_residuals(
+    dataset: PriceDataset, residuals: dict[str, list[SlotResidual]]
+) -> Figure:
+    """εₜ against R and against hour of day (UK), for each model.
+
+    ``residuals`` maps model name to its slots' residuals, from
+    ``evaluation.residuals``.  Each line is the median in 1 GW or 1 hour
+    bins, with the interquartile band.
+    """
+    load = {o.settlement_start: o.residual_load_gw for o in dataset.observations}
+    figure, axes = _panels(2, sharey=True)
+    for colour, (model_name, slots) in zip(FAMILY_COLOURS, residuals.items()):
+        eps = np.array([s.residual_gbp_per_mwh for s in slots])
+        r = np.array([load[s.settlement_start] for s in slots])
+        hour = np.array(
+            [s.settlement_start.astimezone(_LONDON).hour for s in slots], dtype=float
+        )
+        _band(axes[0], _binned(r, eps), colour, label=model_name)
+        _band(axes[1], _binned(hour, eps), colour, label=model_name)
+    for ax in axes:
+        ax.axhline(0.0, color=INK, linewidth=0.8)
+    axes[0].set_xlabel("Residual load R (GW)")
+    axes[1].set_xlabel("Hour of day (UK)")
+    axes[1].set_xticks(range(0, 25, 6))
+    axes[0].set_ylabel("Residual ε (£/MWh)")
+    handles, _ = axes[0].get_legend_handles_labels()
+    figure.legend(handles=handles, loc="lower center", ncols=len(handles))
+    return _finish(figure)
+
+
+def plot_anchoring(
+    day: PriceDataset,
+    curves: dict[str, FittedCurve],
+    target: Target,
+    added_load_gw: list[float],
+    *,
+    region: str,
+) -> Figure:
+    """One day's historical Agile rate against its rate with added load.
+
+    For each family, ``price_response`` moves each slot's price along
+    that family's curve by ``added_load_gw``, keeping its residual.  The
+    historical rate is ``price_response`` with no added load, which is
+    the same for every family when no slot is censored.
+    """
+    if any(o.censored for o in day.observations):
+        raise ValueError("the example day must have no censored slots")
+    hours = [
+        o.settlement_start.astimezone(_LONDON).hour
+        + o.settlement_start.astimezone(_LONDON).minute / 60
+        for o in day.observations
+    ]
     apply_style()
-    fig, ax = plt.subplots(figsize=PRICE_CURVE_FIGURE_INCHES)
+    figure = Figure(figsize=PRICE_CURVE_FIGURE_INCHES)
+    FigureCanvasAgg(figure)
+    ax = figure.subplots()
     style_axes(ax)
-    ax.set_xlabel("Residual load (GW)")
-    ax.set_ylabel("Price (£/MWh)")
-    ax.set_title(title)
-    watermark_stub(fig)
-    plt.close(fig)
-    return fig
+    for hour, added in zip(hours, added_load_gw, strict=True):
+        if added:
+            ax.axvspan(hour, hour + 0.5, color=GRIDLINE, linewidth=0, zorder=0)
+    first = next(iter(curves.values()))
+    zero = [0.0] * len(hours)
+    historical = price_response(day, first, target, zero, region=region)
+    ax.step(
+        hours,
+        historical.price_p_per_kwh,
+        where="post",
+        color=INK,
+        linewidth=LINE_WIDTH,
+        label="Historical",
+    )
+    for family, fitted in curves.items():
+        moved = price_response(day, fitted, target, added_load_gw, region=region)
+        ax.step(
+            hours,
+            moved.price_p_per_kwh,
+            where="post",
+            color=_family_colour(family),
+            label=family,
+        )
+    ax.set_xticks(range(0, 25, 6))
+    ax.set_xlabel("Hour of day (UK)")
+    ax.set_ylabel("Agile import rate (p/kWh)")
+    ax.set_title(f"{historical.day}, +{max(added_load_gw):g} GW in the shaded slots")
+    ax.legend()
+    figure.tight_layout()
+    return figure
 
 
 def plot_level_error(report: EvaluationReport) -> Figure:
@@ -318,9 +513,9 @@ def _family_legend(figure: Figure, report: EvaluationReport) -> None:
     )
 
 
-def _finish(figure: Figure) -> Figure:
+def _finish(figure: Figure, *, legend_rows: int = 1) -> Figure:
     """Lay out the panels, leaving room for a legend along the bottom."""
-    figure.tight_layout(rect=(0.0, 0.08, 1.0, 1.0))
+    figure.tight_layout(rect=(0.0, 0.08 * legend_rows, 1.0, 1.0))
     return figure
 
 
@@ -354,3 +549,54 @@ def _family_colour(family: str) -> str:
 def _unique[T](values: Iterable[T]) -> list[T]:
     """Values in order of first appearance."""
     return list(dict.fromkeys(values))
+
+
+def _exact(dataset: PriceDataset) -> list[PriceObservation]:
+    return [o for o in dataset.observations if not o.censored]
+
+
+def _target_values(
+    rows: Sequence[PriceObservation], target_name: str
+) -> tuple[_Array, _Array]:
+    """R and the target value y for each of ``rows``."""
+    target = TARGETS[target_name]
+    return (
+        np.array([o.residual_load_gw for o in rows]),
+        np.array([target.to_target(o) for o in rows]),
+    )
+
+
+def _edges(x: _Array) -> _Array:
+    return np.arange(np.floor(x.min()), np.ceil(x.max()) + _BIN_WIDTH, _BIN_WIDTH)
+
+
+def _binned(x: _Array, y: _Array) -> _Array:
+    """Rows of (bin centre, q25, median, q75) of y in unit-wide bins of x.
+
+    Bins with fewer than ``_MIN_BIN_POINTS`` points are left out.
+    """
+    edges = _edges(x)
+    index = np.digitize(x, edges) - 1
+    rows = [
+        [(edges[b] + edges[b + 1]) / 2, *np.percentile(y[index == b], [25, 50, 75])]
+        for b in range(len(edges) - 1)
+        if np.count_nonzero(index == b) >= _MIN_BIN_POINTS
+    ]
+    return np.array(rows, dtype=np.float64).reshape(-1, 4).T
+
+
+def _band(ax: Axes, binned: _Array, colour: str, *, label: str) -> None:
+    centres, low, median, high = binned
+    ax.fill_between(centres, low, high, color=colour, alpha=BAND_ALPHA, linewidth=0)
+    ax.plot(centres, median, color=colour, linewidth=LINE_WIDTH, label=label)
+
+
+def _grid(dataset: PriceDataset) -> _Array:
+    loads = [o.residual_load_gw for o in dataset.observations]
+    return np.linspace(min(loads), max(loads), _GRID_POINTS)
+
+
+def _year_colours(count: int) -> list[str]:
+    """Light to dark steps of one hue, so later years are darker."""
+    cmap = mpl.colormaps[YEAR_COLOURMAP]
+    return [to_hex(cmap(x)) for x in np.linspace(0.4, 1.0, count)]
