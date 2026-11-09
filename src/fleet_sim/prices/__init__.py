@@ -29,7 +29,7 @@ from fleet_sim.prices.dataset import (
 )
 from fleet_sim.prices.evaluation import EvaluationReport, FitResult, evaluate
 from fleet_sim.prices.figures import plot_evaluation_summary, plot_price_vs_residual
-from fleet_sim.prices.response import price_response_mwh
+from fleet_sim.prices.response import price_response
 from fleet_sim.prices.targets import TARGETS, Target
 
 __all__ = [
@@ -64,7 +64,7 @@ __all__ = [
     "load_config",
     "plot_evaluation_summary",
     "plot_price_vs_residual",
-    "price_response_mwh",
+    "price_response",
     "selection_data",
     "selection_folds",
     "summarise",
