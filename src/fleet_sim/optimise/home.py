@@ -26,7 +26,7 @@ _VIOLATION = 1e-5
 
 
 @dataclass(frozen=True)
-class _Variables:
+class HomeColumns:
     """Column order: charge, discharge, grid import, soc, charge mode."""
 
     n_slots: int
@@ -78,34 +78,76 @@ def optimise_home(
     return relaxed
 
 
-def _solve(day: HomeDay, adjustment: Sequence[float], *, with_mode: bool) -> Schedule:
-    variables = _Variables(_horizon(day))
+@dataclass(frozen=True)
+class HomeProblem:
+    """One home's feasible set, without an objective.
+
+    ``columns`` maps each variable to its column. ``bounds`` are
+    (POWER-BOUNDS) and (SOC-BOUNDS). ``constraints`` are (SOC), (BALANCE)
+    and (TERMINAL), plus (MODE) when ``with_mode`` is set, in which case
+    ``integrality`` marks ``charge_mode`` integer. Without (MODE) the
+    ``charge_mode`` columns are free in [0, 1] and appear in no constraint.
+    """
+
+    day: HomeDay
+    columns: HomeColumns
+    bounds: Bounds
+    constraints: list[LinearConstraint]
+    integrality: NDArray[np.int64]
+    with_mode: bool
+
+    def schedule(
+        self, solution: NDArray[np.float64], price_p_per_kwh: list[float]
+    ) -> Schedule:
+        """Read this home's schedule from ``solution``, one value per column.
+
+        ``cost_pence`` on the result is the tariff bill at ``price_p_per_kwh``.
+        """
+        solved_by: Literal["lp", "milp"] = "milp" if self.with_mode else "lp"
+        return _schedule(self.columns, solution, price_p_per_kwh, solver=solved_by)
+
+
+def build_home(day: HomeDay, *, with_mode: bool) -> HomeProblem:
+    """The constraints of the one-home problem in ``docs/formulation.md``.
+
+    (SOC), (SOC-BOUNDS), (POWER-BOUNDS), (BALANCE) and (TERMINAL), and
+    (MODE) when ``with_mode`` is set. The objective is left to the caller.
+    """
+    columns = HomeColumns(_horizon(day))
     constraints = [
-        _soc_constraint(day, variables),
-        _balance_constraint(day, variables),
-        _terminal_constraint(day, variables),
+        _soc_constraint(day, columns),
+        _balance_constraint(day, columns),
+        _terminal_constraint(day, columns),
     ]
-    integrality = np.zeros(variables.count, dtype=np.int64)
+    integrality = np.zeros(columns.count, dtype=np.int64)
     if with_mode:
-        constraints.append(_mode_constraint(day, variables))
-        integrality = _integrality(variables)
-    result = milp(
-        _objective(day, variables, adjustment),
-        integrality=integrality,
-        bounds=_bounds(day, variables),
+        constraints.append(_mode_constraint(day, columns))
+        integrality = _integrality(columns)
+    return HomeProblem(
+        day=day,
+        columns=columns,
+        bounds=_bounds(day, columns),
         constraints=constraints,
+        integrality=integrality,
+        with_mode=with_mode,
+    )
+
+
+def _solve(day: HomeDay, adjustment: Sequence[float], *, with_mode: bool) -> Schedule:
+    problem = build_home(day, with_mode=with_mode)
+    result = milp(
+        _objective(day, problem.columns, adjustment),
+        integrality=problem.integrality,
+        bounds=problem.bounds,
+        constraints=problem.constraints,
         # HiGHS otherwise stops at a relative gap of 1e-4, which can return a
         # feasible point whose bill is above the no-battery bill.
         options={"mip_rel_gap": 0.0},
     )
     if not result.success or result.x is None:
         raise RuntimeError(f"home schedule is not optimal ({result.message})")
-    solved_by: Literal["lp", "milp"] = "milp" if with_mode else "lp"
-    return _schedule(
-        day,
-        variables,
-        np.asarray(result.x, dtype=np.float64),
-        solver=solved_by,
+    return problem.schedule(
+        np.asarray(result.x, dtype=np.float64), list(day.price_p_per_kwh)
     )
 
 
@@ -154,7 +196,7 @@ def _price_adjustment(
 
 
 def _objective(
-    day: HomeDay, variables: _Variables, adjustment: Sequence[float]
+    day: HomeDay, variables: HomeColumns, adjustment: Sequence[float]
 ) -> NDArray[np.float64]:
     """Coefficients of (COST) in ``docs/formulation.md``.
 
@@ -168,7 +210,7 @@ def _objective(
     return cost
 
 
-def _integrality(variables: _Variables) -> NDArray[np.int64]:
+def _integrality(variables: HomeColumns) -> NDArray[np.int64]:
     """Mark ``charge_mode`` integer, the ``y_t in {0, 1}`` part of (MODE)."""
     kinds = np.zeros(variables.count, dtype=np.int64)
     for slot in range(variables.n_slots):
@@ -176,7 +218,7 @@ def _integrality(variables: _Variables) -> NDArray[np.int64]:
     return kinds
 
 
-def _bounds(day: HomeDay, variables: _Variables) -> Bounds:
+def _bounds(day: HomeDay, variables: HomeColumns) -> Bounds:
     """Variable limits from (POWER-BOUNDS), (SOC-BOUNDS), and (MODE).
 
     ``grid_import_kw`` has no upper bound. ``charge_mode`` lies in [0, 1].
@@ -193,7 +235,7 @@ def _bounds(day: HomeDay, variables: _Variables) -> Bounds:
     return Bounds(lower, upper)
 
 
-def _soc_constraint(day: HomeDay, variables: _Variables) -> LinearConstraint:
+def _soc_constraint(day: HomeDay, variables: HomeColumns) -> LinearConstraint:
     """Equalities (SOC) in ``docs/formulation.md``.
 
     ``soc[t] = soc_prev + (eta_charge * charge_kw[t] * 0.5
@@ -222,7 +264,7 @@ def _soc_constraint(day: HomeDay, variables: _Variables) -> LinearConstraint:
     return _equalities(rows, rhs)
 
 
-def _balance_constraint(day: HomeDay, variables: _Variables) -> LinearConstraint:
+def _balance_constraint(day: HomeDay, variables: HomeColumns) -> LinearConstraint:
     """Equalities (BALANCE) in ``docs/formulation.md``.
 
     ``grid_import_kw[t] + discharge_kw[t] = demand_kw[t] + charge_kw[t]``.
@@ -239,7 +281,7 @@ def _balance_constraint(day: HomeDay, variables: _Variables) -> LinearConstraint
     return _equalities(rows, rhs)
 
 
-def _terminal_constraint(day: HomeDay, variables: _Variables) -> LinearConstraint:
+def _terminal_constraint(day: HomeDay, variables: HomeColumns) -> LinearConstraint:
     """Equality (TERMINAL) in ``docs/formulation.md``.
 
     ``soc[T - 1] == soc_initial``.
@@ -249,7 +291,7 @@ def _terminal_constraint(day: HomeDay, variables: _Variables) -> LinearConstrain
     return _equalities([row], [day.battery.soc_initial])
 
 
-def _mode_constraint(day: HomeDay, variables: _Variables) -> LinearConstraint:
+def _mode_constraint(day: HomeDay, variables: HomeColumns) -> LinearConstraint:
     """Inequalities (MODE) in ``docs/formulation.md``.
 
     ``charge_kw[t] <= max_charge_kw * charge_mode[t]`` and
@@ -280,14 +322,14 @@ def _equalities(rows: list[list[float]], rhs: list[float]) -> LinearConstraint:
     return LinearConstraint(matrix, rhs, rhs)
 
 
-def _zero_row(variables: _Variables) -> list[float]:
+def _zero_row(variables: HomeColumns) -> list[float]:
     return [0.0] * variables.count
 
 
 def _schedule(
-    day: HomeDay,
-    variables: _Variables,
+    variables: HomeColumns,
     solution: NDArray[np.float64],
+    price_p_per_kwh: list[float],
     *,
     solver: Literal["lp", "milp"],
 ) -> Schedule:
@@ -327,7 +369,7 @@ def _schedule(
         grid_import_kw=grid_import,
         soc=soc,
         charge_mode=mode,
-        cost_pence=_import_cost_pence(day.price_p_per_kwh, grid_import),
+        cost_pence=_import_cost_pence(price_p_per_kwh, grid_import),
         solver=solver,
     )
 
