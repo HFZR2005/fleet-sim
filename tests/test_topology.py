@@ -20,7 +20,7 @@ def _settings(**overrides: object) -> NetworkSettings:
         "lon_max": 0.1,
     }
     defaults.update(overrides)
-    return NetworkSettings(**defaults)
+    return NetworkSettings.model_validate(defaults)
 
 
 def _home_ids(n: int) -> list[str]:

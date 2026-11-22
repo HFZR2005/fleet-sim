@@ -126,13 +126,14 @@ class NetworkSettings(BaseModel):
     """The ``[network]`` section of a scenario.
 
     See ``docs/assumptions.md``, Transformer sizing and Clustered ownership.
+    ``rho`` is one value, or a list that a ``[market]`` scenario sweeps.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     n_transformers: int
     limit_kw: float | None = None
-    rho: float = 0.0
+    rho: float | list[float] = 0.0
     admd_kw: float = 1.0
     headroom: float = 1.0
     power_factor: float = 1.0
@@ -177,14 +178,22 @@ class NetworkSettings(BaseModel):
             raise ValueError(f"{name} must be greater than 0 (got {value})")
         return float(value)
 
-    @field_validator("rho")
+    @field_validator("rho", mode="before")
     @classmethod
-    def rho_is_a_fraction(cls, value: float) -> float:
-        if isinstance(value, bool) or not isinstance(value, int | float):
-            raise TypeError(f"rho must be a number (got {value!r})")
-        if not 0 <= float(value) <= 1:
-            raise ValueError(f"rho must be in [0, 1] (got {value})")
-        return float(value)
+    def rho_is_a_fraction(cls, value: object) -> float | list[float]:
+        levels = value if isinstance(value, list) else [value]
+        if len(levels) == 0:
+            raise ValueError("rho must contain at least one value")
+        checked: list[float] = []
+        for level in levels:
+            if isinstance(level, bool) or not isinstance(level, int | float):
+                raise TypeError(f"rho must be a number (got {level!r})")
+            if not 0 <= float(level) <= 1:
+                raise ValueError(f"rho must be in [0, 1] (got {level})")
+            checked.append(float(level))
+        if isinstance(value, list):
+            return checked
+        return checked[0]
 
     @field_validator("power_factor")
     @classmethod
@@ -220,6 +229,12 @@ class NetworkSettings(BaseModel):
                 f"lon_min {self.lon_min} must be below lon_max {self.lon_max}"
             )
         return self
+
+    def rho_levels(self) -> list[float]:
+        """Every ρ this section names, as a list."""
+        if isinstance(self.rho, list):
+            return list(self.rho)
+        return [self.rho]
 
 
 class HomeProfile(BaseModel):

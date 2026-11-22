@@ -241,3 +241,18 @@ def test_single_penetration_returns_no_crossing(tmp_path: Path) -> None:
 
     assert result.overload_crossing is None
     assert len(result.network_levels) == 1
+
+
+def test_a_network_scenario_refuses_a_list_of_rho(tmp_path: Path) -> None:
+    # Only a [market] scenario sweeps rho; the network path takes one value.
+    path = _sweep_scenario(tmp_path)
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("rho = 0.0", "rho = [0.0, 0.8]"), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="a network scenario takes one rho"):
+        run_network_scenario(
+            load_scenario(path),
+            pool=HouseholdDemandPool.read(_FIXTURE),
+            price_source=_prices(),
+            output_dir=tmp_path / "out",
+        )

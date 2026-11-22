@@ -75,8 +75,15 @@ def run_network_scenario(
         raise ValueError(
             f"a t-interval needs at least 2 replications (got {scenario.replications})"
         )
+    rho_levels = scenario.network.rho_levels()
+    if len(rho_levels) != 1:
+        raise ValueError(
+            f"a network scenario takes one rho (got {rho_levels}); "
+            "a [market] scenario can sweep it"
+        )
     begin_stub_run()
     settings = scenario.network
+    rho = rho_levels[0]
     penetrations = scenario.penetration_levels()
     dates = _dates(scenario.start, scenario.end)
     n_passes = len(penetrations) * 2  # with + without batteries
@@ -178,7 +185,7 @@ def run_network_scenario(
 
     overload_curve_path = output_dir / "overload_curve"
     curve_series = OverloadSeries(
-        label=f"ρ = {settings.rho}",
+        label=f"ρ = {rho}",
         penetrations=penetrations,
         bands=[
             _metric_band(level.metrics, "transformers_overloaded_share")
@@ -248,7 +255,7 @@ def _run_one_replication(
         mode="diverse",
         distribution=scenario.battery,
         transformer_map=spec.home_transformer,
-        rho=settings.rho,
+        rho=settings.rho_levels()[0],
     )
     base = assign_transformers(generated.fleet, spec)
     day_reports = []
