@@ -58,6 +58,16 @@ Fifty homes on four transformers, region C, 5–11 January 2026, thirty replicat
 
 ![Share of transformers overloaded against penetration, fifty homes, region C, 5–11 January 2026](docs/overload.svg)
 
+### The fleet in the loop
+
+```bash
+uv run fleet-sim run-scenario scenarios/market-sweep.toml --release
+```
+
+The same fifty homes, but each day's prices now respond to the fleet's own charging through the fitted price curve, and the fleet is solved for the equilibrium where every home is optimal at the prices it causes. National uptake, 0 to 4 million batteries, moves the price; local uptake and clustering load the transformers. Ten replications, each paired with the same fleet at historical prices. Price feedback spreads the national herd: per million batteries the peak added load falls from 4.2 GW at historical prices to 3.5 GW at 1 million batteries and 2.2 GW at 4 million. Each home keeps 90% of its saving at 1 million batteries and 80% at 4 million under the main price curve, but only 25–42% at 4 million under the robustness curves with steeper evening slopes. Under the main curve most of the lost saving is dearer charging, not cheaper discharging, as the price-curve fit predicted. Prices alone do not protect transformers: when each home plans alone at the equilibrium prices the fleet herds again, and at full local penetration every transformer stays overloaded at every national uptake. The full results, the diagnostics and what depends on the choice of allocation and price curve are in [docs/results/milestone-4.6.md](docs/results/milestone-4.6.md).
+
+![Saving per battery home against national batteries, three price curves, fifty homes, region C, 5–11 January 2026](docs/saving_by_model.svg)
+
 ## Price curves
 
 ```bash
