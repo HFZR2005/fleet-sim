@@ -8,6 +8,7 @@ from rich.text import Text
 
 from fleet_sim.models.results import (
     ConfidenceInterval,
+    MarketLevelResult,
     MetricEstimate,
     PairedDifference,
     ScenarioRun,
@@ -25,6 +26,11 @@ _LABELS = {
     "worst_peak_utilisation": "Worst peak utilisation",
     "total_overload_energy_kwh": "Total overload energy (kWh)",
     "hidden_overload_share": "Hidden overload share",
+    "peak_added_load_gw": "Peak added load (GW)",
+    "saving_per_battery_home_p_per_day": "Saving per battery home (p/day)",
+    "non_battery_price_change_p_per_day": "Price change, no battery (p/day)",
+    "mean_charge_price_p_per_kwh": "Mean charging price (p/kWh)",
+    "mean_discharge_price_p_per_kwh": "Mean discharging price (p/kWh)",
 }
 
 
@@ -50,6 +56,8 @@ def run_scenario_view(result: ScenarioRun) -> Group:
         blocks.append(_penetration_table(result))
     if len(result.network_levels) > 1:
         blocks.append(_network_penetration_table(result))
+    for market in result.market_levels:
+        blocks.extend(_market_blocks(market, stubbed=bool(result.stubs)))
     if result.stubs:
         listed = Text("Active stubs", style="bold")
         listed.append("\n" + "\n".join(result.stubs))
@@ -67,6 +75,8 @@ def run_scenario_view(result: ScenarioRun) -> Group:
         blocks.append(_path_line("Penetration figure", result.penetration_figure))
     if result.overload_figure is not None:
         blocks.append(_path_line("Overload figure", result.overload_figure))
+    if result.market_figure is not None:
+        blocks.append(_path_line("Market figure", result.market_figure))
     return Group(*blocks)
 
 
@@ -76,6 +86,29 @@ def show_run_scenario(result: ScenarioRun) -> None:
     ``crop`` is off so a figure path longer than the terminal stays intact.
     """
     Console().print(run_scenario_view(result), crop=False, overflow="ignore")
+
+
+def _market_blocks(level: MarketLevelResult, *, stubbed: bool) -> list[Table | Text]:
+    """One (M, penetration) point: market, both allocations, diagnostics."""
+    prefix = "STUB " if stubbed else ""
+    point = f"M {level.national_batteries:,.0f}, penetration {level.penetration:.0%}"
+    d = level.diagnostics
+    diagnostics = Text(
+        f"{prefix}Diagnostics, {point}: "
+        f"linearisation error {d.linearisation_error_p_per_kwh:.3f} p/kWh, "
+        f"(MODE) breaks {d.mode_break_slots}, "
+        f"largest re-plan saving {d.max_replan_saving_p:.2f} p, "
+        f"total {d.total_replan_saving_p:.2f} p, "
+        f"out-of-range slots {d.out_of_range_slots}"
+    )
+    return [
+        _metric_table(f"{prefix}Market, {point}", level.market),
+        _metric_table(f"{prefix}Joint allocation, {point}", level.joint_overload),
+        _metric_table(
+            f"{prefix}Re-planned allocation, {point}", level.replanned_overload
+        ),
+        diagnostics,
+    ]
 
 
 def _metric_table(title: str, rows: list[MetricEstimate]) -> Table:

@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from importlib.metadata import version
 from pathlib import Path
 
+from fleet_sim.commands.market import run_market_scenario
 from fleet_sim.commands.network import run_network_scenario
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import PriceSource
@@ -59,6 +60,15 @@ def run_saved_scenario(
     pool = HouseholdDemandPool.read(
         households_path, max_households=max_households, progress=progress
     )
+    if scenario.market is not None:
+        return run_market_scenario(
+            scenario,
+            pool=pool,
+            price_source=price_source,
+            output_dir=output_dir,
+            progress=progress,
+            release=release,
+        )
     if scenario.network is not None:
         return run_network_scenario(
             scenario,

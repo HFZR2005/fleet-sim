@@ -10,6 +10,7 @@ from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.data.source import FixturePriceSource
 from fleet_sim.fleet.frames import read_frames
 from fleet_sim.fleet.generate import generate_fleet
+from fleet_sim.models.market import MarketSettings
 from fleet_sim.models.prices import PriceSeries, london_day_bounds_utc
 from fleet_sim.models.scenario import BatteryDistribution, BatteryProductSpec
 from fleet_sim.scenario import git_commit, load_scenario, read_metadata, run_scenario
@@ -76,6 +77,31 @@ def test_a_scenario_rejects_a_bad_field(tmp_path: Path) -> None:
     path.write_text(backwards, encoding="utf-8")
     with pytest.raises(ValueError, match="before start"):
         load_scenario(path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("national_batteries", -1, "national_batteries must be at least 0"),
+        ("national_batteries", [0, -5], "national_batteries must be at least 0"),
+        ("price_model", "fuel_adjusted/", "price_model must be target/family"),
+        ("price_model", "exponential", "price_model must be target/family"),
+        ("segments", 0, "segments must be at least 1"),
+        ("equilibrium_tolerance_p", -0.1, "equilibrium_tolerance_p must be at least 0"),
+        ("curve_range_gw", [42.0, -0.5], "curve_range_gw must have low < high"),
+    ],
+)
+def test_a_market_section_rejects_a_bad_value(
+    field: str, value: object, message: str
+) -> None:
+    section: dict[str, object] = {
+        "national_batteries": [0, 1_000_000],
+        "equilibrium_tolerance_p": 1.0,
+        field: value,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        MarketSettings.model_validate(section)
 
 
 def test_the_drawn_battery_comes_from_the_scenario_distribution() -> None:
