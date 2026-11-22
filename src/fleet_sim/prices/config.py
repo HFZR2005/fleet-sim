@@ -118,12 +118,17 @@ class EvaluationConfig(BaseModel):
 
 
 class ChosenConfig(BaseModel):
-    """``[chosen]`` section: filled after the compare run."""
+    """``[chosen]`` section: filled after the compare run.
+
+    Each name is ``target/family``.  ``main`` is the model later
+    milestones use; ``robustness`` lists the models their results are
+    checked against.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     main: str
-    robustness: str
+    robustness: list[str]
 
 
 class OutputConfig(BaseModel):

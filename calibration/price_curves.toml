@@ -21,9 +21,16 @@ targets = ["raw_pooled", "raw_per_year", "fuel_adjusted"]
 weight_by_fleet_schedule = "identical"
 
 [chosen]
-main = ""
-robustness = ""
+# Why: docs/decisions/0004-price-curve-model.md
+main = "fuel_adjusted/exponential"
+robustness = [
+    "fuel_adjusted/cubic_offset",
+    "fuel_adjusted/isotonic",
+    "fuel_adjusted/signed_quadratic",
+    "fuel_adjusted/cubic",
+    "raw_per_year/exponential",
+]
 
 [output]
 results_dir = "results/price-curves"
-parameters_file = "calibration/parameters.json"
+parameters_file = "calibration/price_curves.json"
