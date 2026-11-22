@@ -1,41 +1,21 @@
-"""The fleet in the loop for one day: price inputs, the equilibrium, metrics.
+"""The fleet in the loop for one day: the equilibrium and its metrics.
+
+Price inputs are in ``fleet/price_inputs.py``.
 
 See ``docs/formulation.md``, Fleet in the loop.
 """
 
-from datetime import date
-
-from fleet_sim.data.source import PriceSource
+from fleet_sim.fleet.price_inputs import DayPriceInputs
 from fleet_sim.fleet.solve import solve_fleet
 from fleet_sim.models.fleet import Fleet
 from fleet_sim.models.home import SLOTS_PER_DAY
 from fleet_sim.models.market import (
-    DayPriceInputs,
     EquilibriumDiagnostics,
     MarketDay,
     MarketMetrics,
     MarketSettings,
 )
 from fleet_sim.stubs import stub
-
-
-@stub("historical Agile rates with R, k and π left at zero")
-def day_price_inputs(
-    day: date, region: str, price_source: PriceSource
-) -> DayPriceInputs:
-    """R, k and π for each slot of ``day``, and its historical Agile rates."""
-    historical = price_source.load(day, region)
-    zeros = [0.0] * SLOTS_PER_DAY
-    return DayPriceInputs(
-        region=historical.region,
-        day=day,
-        residual_load_gw=zeros,
-        fuel_cost_gbp_per_mwh=zeros,
-        wholesale_gbp_per_mwh=zeros,
-        censored=[False] * SLOTS_PER_DAY,
-        wholesale_upper_gbp_per_mwh=[None] * SLOTS_PER_DAY,
-        historical=historical,
-    )
 
 
 @stub("solves every home at historical prices with b = 0")
