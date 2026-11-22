@@ -554,6 +554,136 @@ with $`\pi_t^+ = \infty`$ when only a lower bound is known. The curve's own pred
 
 **Back to Agile rates.** Each $`\pi'_t`$ is turned into an Agile import rate by the forward formula in `docs/data/agile.md`, with the same product and peak window that the inversion used, and then VAT. Days of the Energy Price Guarantee (1 October 2022 to 30 June 2023) are rejected: its discount is known only for region C in the first quarter, so the billed rate cannot be recomputed for the rest.
 
+## Fleet in the loop
+
+Up to here a home's tariff $`p_t`$ is data: the historical Agile rate, whatever the fleet does. This section makes the tariff depend on the fleet's own charging, through the price curve, and states the condition that the fleet and the prices must then meet together. Each day is solved on its own, as in the one-home problem, because (TERMINAL) closes every day.
+
+### Added load
+
+Home $`j`$, one of the $`N_b`$ simulated homes with a battery, has net battery power
+
+$$
+n_{jt} = c_{jt} - d_{jt} = g_{jt} - L_{jt},
+$$
+
+by (BALANCE): positive while charging, negative while discharging. Its demand $`L_{jt}`$ is already inside the historical residual load $`R_t`$, so only the battery adds load. The simulated batteries stand for $`M`$ batteries nationally, and add
+
+$$
+b_t = \kappa \sum_{j=1}^{N_b} n_{jt},
+  \qquad
+\kappa = \frac{M}{N_b \cdot 10^{6}} \ \text{GW per kW},
+\tag{LOAD}
+$$
+
+to slot $`t`$. This assumes the national fleet behaves like the simulated batteries: the same mix of homes and batteries, facing the same prices. $`N_b`$ counts only homes with a battery, so $`M`$ alone sets the national fleet, whatever share of simulated homes has one (local penetration). With $`M = 0`$ or $`N_b = 0`$, $`b_t = 0`$ and prices are historical.
+
+### Price as a function of load
+
+The tariff a home faces in slot $`t`$ when the fleet adds $`b`$ GW is the anchored wholesale price of [Anchoring](#anchoring), turned into an Agile rate:
+
+$$
+P_t(b) = A_t\Bigl(\pi_t + k_t \bigl[h(R_t + b) - h(R_t)\bigr]\Bigr),
+\tag{PRICE}
+$$
+
+where $`A_t`$ is the forward Agile formula with VAT for slot $`t`$, in pence per kWh (`docs/data/agile.md`), and a censored slot uses the clipped anchor $`\hat\pi_t`$ in place of $`\pi_t`$. $`P_t(0)`$ is the historical rate.
+
+**$`P_t`$ never decreases.** If $`h' \ge 0`$, the anchored price does not fall as $`b`$ grows. $`A_t`$ multiplies the wholesale price by a positive regional factor, adds the peak adder, and takes the minimum with the cap, so it does not decrease either. Everything below depends on this. It is why the main model's slope must not change sign ([ADR-0004](decisions/0004-price-curve-model.md)): with the cubic with offset, $`P_t`$ can fall at the top of the range. $`P_t`$ is strictly increasing wherever $`h' > 0`$ and the rate is below the cap.
+
+### Equilibrium
+
+Each home takes prices as given. One home's battery is a few kW against a national residual load of tens of GW, so it has no measurable effect on the price, and it does not plan for one. Home $`j`$ solves the one-home problem with tariff $`p_t = P_t(b_t)`$.
+
+A fleet schedule $`n^*`$, with added load $`b^*`$ from (LOAD), is an **equilibrium** when every home's schedule is optimal at the prices it causes:
+
+$$
+n^*_j \ \text{solves the one-home problem with } p_t = P_t(b^*_t), \qquad j = 1, \ldots, N_b.
+\tag{EQ}
+$$
+
+This is a fixed point. Schedules set prices through (LOAD) and (PRICE), and prices set schedules through the one-home problem. Up to milestone 4, every run used $`b_t = 0`$, which is (EQ) only when the fleet is too small to move the price.
+
+### The equilibrium as one optimisation
+
+Define
+
+$$
+\Phi(n) = \frac{\Delta}{\kappa} \sum_{t=0}^{T-1} \int_0^{b_t} P_t(\beta)\, d\beta,
+  \qquad b_t = \kappa \sum_j n_{jt}.
+\tag{POTENTIAL}
+$$
+
+Its derivative with respect to one home's power in one slot is
+
+$$
+\frac{\partial \Phi}{\partial n_{jt}} = \Delta\, P_t(b_t),
+$$
+
+which is exactly what an extra kW in slot $`t`$ costs that home in (COST) at prices $`P_t(b_t)`$, since $`g_{jt} = L_{jt} + n_{jt}`$. So the optimality conditions for minimising $`\Phi`$ over every home's feasible set, jointly, are the conditions that each home's schedule is optimal at the prices it causes. Because each $`P_t`$ never decreases, each integral is a convex function of $`b_t`$, and $`b_t`$ is linear in $`n`$, so $`\Phi`$ is convex. With (MODE) dropped, each home's feasible set is a polyhedron. The equilibria of (EQ) are then exactly the minimisers of $`\Phi`$. This is the potential-game argument that traffic assignment uses for drivers each choosing their own fastest route.
+
+Units: $`P_t`$ is in pence per kWh and $`\beta`$ in GW, so the integral is in pence per kWh times GW. Dividing by $`\kappa`$ (GW per kW) gives pence per hour, and $`\Delta`$ (hours) gives pence.
+
+**$`\Phi`$ is not the fleet's bill.** It is the area under the price curves. A home pays $`P_t`$ for its own extra kW but ignores that the kW raises the price for every other home. A fleet run as one buyer would minimise its total bill instead. That counts the rise and charges less into steep slots. The difference between the two outcomes is the cost of each home acting alone. Milestone 5 measures it.
+
+**What is unique.** Where $`P_t`$ is strictly increasing, $`\Phi`$ is strictly convex in $`b_t`$, so the national added load $`b^*_t`$ is the same in every equilibrium. Which home supplies it is not. Two identical homes can swap slots without changing $`b^*`$ or anyone's prices. National results are therefore determined, but the flow through a transformer, which depends on which homes charge when, is not. See [Open choices](#open-choices).
+
+### Computing it
+
+Re-solving every home at the prices of the last schedule, and repeating, can cycle. Each home's problem is linear, so its schedule jumps between corners. If every home charges in the cheapest slot, that slot becomes the dearest, and every home moves to another slot together. Minimising $`\Phi`$ directly avoids this. Each integral is replaced by straight-line segments, which makes the whole fleet-day one linear program, solved once.
+
+**Range of the added load.** In slot $`t`$ the batteries can add at least $`b^{\min} = -\kappa \sum_j \bar d_j`$ and at most $`b^{\max} = \kappa \sum_j \bar c_j`$, where $`\bar c_j`$ and $`\bar d_j`$ are home $`j`$'s charge and discharge limits. The range is the same in every slot. It is split into $`K`$ equal segments of width $`w = (b^{\max} - b^{\min}) / K`$, with breakpoints $`\beta_k = b^{\min} + k w`$, $`k = 0, \ldots, K`$.
+
+**Segments.** On segment $`k`$ the integral $`J_t(b) = \int_0^{b} P_t(\beta)\, d\beta`$ is replaced by a straight line with slope
+
+$$
+\sigma_{tk} = \tfrac{1}{2}\bigl(P_t(\beta_{k-1}) + P_t(\beta_k)\bigr),
+\tag{SEGMENT}
+$$
+
+the trapezoid estimate of the average of $`P_t`$ over the segment, in pence per kWh. Because $`P_t`$ never decreases, neither does $`\sigma_{tk}`$ in $`k`$. The approximation is then convex, so a minimiser fills the segments in order and no integer variables are needed.
+
+**The linear program.** Variables, per slot, are the segment fills $`0 \le u_{tk} \le w`$, plus every battery home's $`c_{jt}`$, $`d_{jt}`$, $`g_{jt}`$ and state of charge of the one-home problem. It minimises
+
+$$
+\frac{\Delta}{\kappa} \sum_{t=0}^{T-1} \sum_{k=1}^{K} \sigma_{tk}\, u_{tk}
+\tag{JOINT}
+$$
+
+subject to each home's (SOC), bounds, (BALANCE) and (TERMINAL), and, in every slot,
+
+$$
+\kappa \sum_j (c_{jt} - d_{jt}) = b^{\min} + \sum_{k=1}^{K} u_{tk}.
+\tag{LINK}
+$$
+
+(JOINT) drops the constant $`J_t(b^{\min})`$. It has no term $`p_t g_{jt}`$: by (BALANCE), a home's import differs from its demand only by $`n_{jt}`$, so its cost enters through $`\Phi`$. Homes without a battery are not in the program. Their import is their demand. With $`M = 0`$ or $`N_b = 0`$, $`\kappa = 0`$, (JOINT) is undefined, and the run is the historical-price run of milestones 2–4.
+
+**What the approximation costs.** The solution is the exact equilibrium of a stepped price that equals $`\sigma_{tk}`$ on segment $`k`$. Its error in slot $`t`$ is $`|P_t(b^*_t) - \sigma_{tk^*}|`$, where $`k^*`$ is the segment that holds $`b^*_t`$. This is at most the change in $`P_t`$ across one segment. The largest over slots is reported as the **linearisation error**, in pence per kWh.
+
+**(MODE) is dropped.** The joint program is the relaxed problem of [The equilibrium as one optimisation](#the-equilibrium-as-one-optimisation). As in the one-home problem, charging and discharging in the same slot only pays when the marginal price there is negative. Every slot where a home does both, past $`10^{-6}`$ kW, is counted and reported. Such a schedule is not one a battery can run.
+
+**Equilibrium check.** Let $`p^*_t = P_t(b^*_t)`$. Each battery home is solved again on its own at $`p^*`$, with the one-home solver, (MODE) included. Its **re-plan saving** is
+
+$$
+E_j = \Delta \sum_t p^*_t\, g^*_{jt} - \text{(its re-solved bill at } p^*),
+\tag{CHECK}
+$$
+
+in pence, where $`g^*_{jt}`$ is its import in the joint solution. At an exact equilibrium $`E_j \le 0`$ for every home: no home can do better alone. $`E_j`$ can be slightly negative because the re-solve includes (MODE). The largest $`E_j`$ and the sum over homes are reported, and a run is flagged when the largest exceeds a set tolerance.
+
+### Open choices
+
+These are not settled by the argument above.
+
+- **Which home supplies $`b^*`$.** The joint program returns one equilibrium, at a corner chosen by the solver. Every other split of the same $`b^*`$ among the homes that keeps each home optimal is also an equilibrium. Identical homes need not get identical schedules. Two allocations are reported:
+  - **Joint.** Each home runs its schedule from (JOINT). This is an equilibrium, but which one is arbitrary as far as transformers are concerned.
+  - **Re-planned.** Each home runs its own best schedule at $`p^*`$, from the equilibrium check. This is not an equilibrium: if every home re-plans alone at the same prices, they may herd again, and their national load differs from $`b^*`$. The difference is reported. It shows how fragile the spread is.
+
+  Overloads depend on the allocation. National results do not.
+- **National penetration $`M`$.** (LOAD) needs it. It is a sweep axis, separate from the share of homes on one transformer that have a battery (local penetration).
+- **Range of the curve.** $`R_t + b_t`$ can leave the training range of $`R`$ (−0.5 to 42.0 GW over 2021–2024). The exponential's slope stays positive there, but its level is an extrapolation. Slots outside the range are counted.
+- **Days that cannot be priced.** [Anchoring](#anchoring) rejects days of the Energy Price Guarantee, so they cannot be run in the loop.
+
 ## Later extensions
 
 These are not part of the model above.
