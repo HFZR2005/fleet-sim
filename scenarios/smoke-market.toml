@@ -14,7 +14,6 @@ replications = 2
 
 [market]
 national_batteries = [0, 1000000]
-equilibrium_tolerance_p = 1.0
 
 [network]
 n_transformers = 2

@@ -33,7 +33,7 @@ class MarketSettings(BaseModel):
     price_model: str = "fuel_adjusted/exponential"
     price_parameters_file: Path = Path("calibration/price_curves.json")
     segments: int = 40
-    equilibrium_tolerance_p: float
+    equilibrium_tolerance_p: float = 1.0
     curve_range_gw: tuple[float, float] = (-0.5, 42.0)
 
     @field_validator("national_batteries", mode="before")
