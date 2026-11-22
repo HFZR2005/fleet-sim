@@ -66,3 +66,18 @@ The three families that fit agree within about 1.7 £/MWh per GW in charging hou
 
 - The exponential's slope is either rising or falling over all of $`R`$; it cannot be flat in the middle and steep at both ends. In the fuel-adjusted fits $`\gamma < 0`$, so the slope falls with $`R`$, and the curve misses the sharp rise above about 35 GW that the isotonic fit follows (`fits.png`). Few slots and little of the fleet's energy lie there (`slopes.png`).
 - Both choices inherit the constant-σ noise model of [ADR-0003](0003-noise-model.md).
+
+## Final test
+
+`finalise` refit the six models on 2021–2024 and scored them once on 2025. RMSE on exact slots, £/MWh:
+
+| Model | 2025 |
+| --- | ---: |
+| `fuel_adjusted/exponential` (main) | 21.3 |
+| `fuel_adjusted/cubic_offset` | 21.8 |
+| `fuel_adjusted/isotonic` | 20.0 |
+| `fuel_adjusted/signed_quadratic` | 47.6 |
+| `fuel_adjusted/cubic` | 63.3 |
+| `raw_per_year/exponential` (in-sample) | 21.9 |
+
+The main model's error is within the 19–36 £/MWh range of the training years, so the comparison did not overfit them. The cubic with offset's slope turned negative again at the top of the range (−0.0008 $`\pi / k`$ per GW). The parameters and their provenance are in `calibration/price_curves.json`.

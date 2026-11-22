@@ -57,3 +57,16 @@ uv run fleet-sim run-scenario scenarios/network-sweep.toml
 Fifty homes on four transformers, region C, 5–11 January 2026, thirty replications. Each transformer is sized from ADMD (2 kW per home, power factor 0.95, standard ratings). Without batteries, no transformer is overloaded (mean utilisation 0.43). Batteries charging during the same cheap half-hours push transformers past their limits: at 25% penetration, 15% of transformers are overloaded; at 50%, more than half; at 100%, every transformer is overloaded with a mean peak utilisation of 1.66. When battery ownership clusters on transformers (ρ = 0.8), overloads appear earlier and hit harder — at 25% penetration, overload energy rises from 3 kWh to 70 kWh. The full results are in [docs/results/milestone-4.md](docs/results/milestone-4.md).
 
 ![Share of transformers overloaded against penetration, fifty homes, region C, 5–11 January 2026](docs/overload.svg)
+
+## Price curves
+
+```bash
+uv run python scripts/fit_price_curves.py compare
+uv run python scripts/fit_price_curves.py finalise
+```
+
+Batteries that all charge in the same cheap half-hours raise the price of those half-hours. To model that, the wholesale price is fitted as a curve of residual load: demand minus renewables. `compare` fits five curve shapes to three targets on 2021–2024, scoring each pooled fit on a year it did not see. `finalise` refits the chosen models and scores them once on 2025, then writes `calibration/price_curves.json`, which later milestones read with `load_price_model`.
+
+The main model divides price by the fuel cost of a gas plant before fitting. Raw prices in 2022 sit far above other years because gas was expensive, not because load was higher. After dividing by fuel cost the four years fall on one curve. The curve is exponential: it fits as well as any smooth shape, and its slope cannot turn negative. On 2025 it misses the price by 21.3 £/MWh (RMSE), against 19–36 £/MWh on the training years. The choice and the robustness models are explained in [ADR-0004](docs/decisions/0004-price-curve-model.md).
+
+![Price against residual load, raw and divided by fuel cost, 2021–2024](docs/fuel_adjustment.svg)

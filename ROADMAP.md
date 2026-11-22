@@ -18,6 +18,12 @@ How large is the new peak, and how wide is the spread, when homes are no longer 
 
 Where do transformer limits bind, and how does the network reach a home? Done. `fleet-sim run-scenario scenarios/network-sweep.toml` sweeps penetration from 0% to 100% on a four-transformer tree, measures overloads with 95% intervals, and compares clustered (ρ = 0.8) to unclustered (ρ = 0) ownership. Overloads first appear at 25% penetration and every transformer is overloaded at full penetration. Clustering brings overloads forward and concentrates the energy. Results are in `docs/results/milestone-4.md`.
 
+## Milestone 4.5
+
+How much does the wholesale price move when the fleet adds load? Done. `scripts/fit_price_curves.py` fits the price as a curve of residual load, and `finalise` writes the chosen curves to `calibration/price_curves.json`. The main model is an exponential fitted to price divided by fuel cost, with four other curve shapes and an unadjusted fit kept as robustness checks ([ADR-0004](docs/decisions/0004-price-curve-model.md)). On the held-out year, 2025, it scores 21.3 £/MWh RMSE.
+
+Next, the fleet goes into the loop: batteries schedule against prices that respond to their own charging, iterated until schedules and prices agree. Then penetration varies nationally, which moves the price, and locally, which loads the transformers, as two separate axes.
+
 ## Milestone 5
 
 How much of the battery savings can coordination keep while removing the overloads? A coordinator adjusts each home's charging window so that no transformer exceeds its limit. The question is the trade-off: how many pence per home does the fleet give up, and which homes bear the cost?
