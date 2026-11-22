@@ -53,7 +53,7 @@ def _config(tmp_path: Path) -> CalibrationConfig:
             },
             "chosen": {
                 "main": "",
-                "robustness": "",
+                "robustness": [],
             },
             "output": {
                 "results_dir": str(tmp_path / "results"),

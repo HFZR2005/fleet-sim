@@ -301,9 +301,7 @@ def _finalise(config: CalibrationConfig, config_path: Path) -> None:
     """
     if not config.chosen.main:
         raise ValueError("[chosen] main is empty — run compare first and pick a model")
-    chosen = [config.chosen.main]
-    if config.chosen.robustness:
-        chosen.append(config.chosen.robustness)
+    chosen = [config.chosen.main, *config.chosen.robustness]
     params_path = Path(config.output.parameters_file)
     if params_path.exists():
         raise FileExistsError(
