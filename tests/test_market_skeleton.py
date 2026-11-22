@@ -1,4 +1,4 @@
-"""A [market] scenario runs end to end on stubs, and --release refuses it.
+"""A [market] scenario runs end to end on its one remaining stub, the figure.
 
 Its prices come from the price-curve fixture cache, so nothing is downloaded.
 """
@@ -13,10 +13,7 @@ from fleet_sim.cli import main
 _ROOT = Path(__file__).parents[1]
 _HOUSEHOLDS = _ROOT / "tests" / "fixtures" / "lcl_household_days.csv"
 _SCENARIO = _ROOT / "scenarios" / "smoke-market.toml"
-_STUBS = (
-    "market_metrics",
-    "plot_market_placeholder",
-)
+_STUBS = ("plot_market_placeholder",)
 
 
 def test_the_smoke_market_scenario_runs_and_lists_its_stubs(
@@ -37,17 +34,6 @@ def test_the_smoke_market_scenario_runs_and_lists_its_stubs(
         1_000_000.0,
     ]
     assert "STUB" in (output / "market.svg").read_text(encoding="utf-8")
-
-
-def test_release_fails_while_stubs_remain(
-    tmp_path: Path, price_cache: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    output = tmp_path / "out"
-    code = main([*_argv(output, price_cache), "--release"])
-
-    assert code == 1
-    assert "market_metrics" in capsys.readouterr().err
-    assert not (output / "metrics.json").exists()
 
 
 def _argv(output: Path, cache: Path) -> list[str]:

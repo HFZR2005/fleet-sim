@@ -684,6 +684,41 @@ These are not settled by the argument above.
 - **Range of the curve.** $`R_t + b_t`$ can leave the training range of $`R`$ (−0.5 to 42.0 GW over 2021–2024). The exponential's slope stays positive there, but its level is an extrapolation. Slots outside the range are counted.
 - **Days that cannot be priced.** [Anchoring](#anchoring) rejects days of the Energy Price Guarantee, so they cannot be run in the loop.
 
+### Market measures
+
+These summarise one replication: one fleet, solved in the loop on each of its days $`d = 1, \ldots, D`$. $`B`$ is the set of homes with a battery, $`N_b = |B|`$, and $`N`$ is the number of homes. On day $`d`$, $`p^*_{dt} = P_t(b^*_{dt})`$ is the equilibrium price, $`p^0_{dt} = P_t(0)`$ the historical one, and $`c_{jdt}`$, $`d_{jdt}`$, $`g_{jdt}`$ and $`n_{jdt} = c_{jdt} - d_{jdt}`$ are home $`j`$'s schedule in the joint allocation. With $`M = 0`$ every price is historical and the schedules are the milestone-4 ones, so each measure below is also defined there, and each is compared with $`M = 0`$ on the same fleet and days.
+
+**Peak added load** is the greatest $`b^*_{dt}`$ over the replication's days and slots, in GW. Its **hour** is $`\lfloor t / 2 \rfloor`$ for the earliest slot with the greatest fleet net battery power $`\sum_{j \in B} n_{jdt}`$, over all days. For $`M > 0`$ that is the slot of the peak added load, since $`b^*_{dt} = \kappa \sum_j n_{jdt}`$. With $`M = 0`$ the peak added load is 0 and the hour is that of the herd at historical prices.
+
+**Saving per battery home** is a battery home's no-battery bill at $`p^*`$ minus its bill at $`p^*`$, averaged over battery homes and days, in pence per day:
+
+$$
+S = \frac{\Delta}{D\, N_b} \sum_{d=1}^{D} \sum_{j \in B} \sum_{t} p^*_{dt}\,\bigl(L_{jdt} - g_{jdt}\bigr)
+  = -\frac{\Delta}{D\, N_b} \sum_{d,t} p^*_{dt} \sum_{j \in B} n_{jdt}.
+$$
+
+The second form shows that $`S`$ depends only on $`b^*`$, so it is the same for every equilibrium, however $`b^*`$ is split among the homes.
+
+**Price change without a battery** is how much more a home pays for its demand, with no battery, at $`p^*`$ than at historical prices, averaged over homes and days, in pence per day:
+
+$$
+C = \frac{\Delta}{D\, N} \sum_{d=1}^{D} \sum_{j=1}^{N} \sum_{t} \bigl(p^*_{dt} - p^0_{dt}\bigr) L_{jdt}.
+$$
+
+The average is over every simulated home's demand, not only the homes without a battery. Demand is drawn the same way for both, and at local penetration 1 no home lacks a battery.
+
+**Mean charging price** is the fleet's charge-weighted price, and the **mean discharging price** the discharge-weighted one, in pence per kWh:
+
+$$
+\bar p^{\,c} = \frac{\sum_{d,t} p^*_{dt} \sum_{j \in B} c_{jdt}}{\sum_{d,t} \sum_{j \in B} c_{jdt}},
+  \qquad
+\bar p^{\,d} = \frac{\sum_{d,t} p^*_{dt} \sum_{j \in B} d_{jdt}}{\sum_{d,t} \sum_{j \in B} d_{jdt}}.
+$$
+
+Each needs the fleet to charge, or discharge, at some point in the replication.
+
+**Net power per battery home** in slot $`t`$ is $`\frac{1}{D N_b} \sum_{d} \sum_{j \in B} n_{jdt}`$, in kW. For $`M > 0`$ it is the mean $`b^*_{dt}`$ divided by $`M / 10^6`$, the national added load per million batteries in GW. With $`M = 0`$ it is the herd at historical prices on the same scale.
+
 ## Later extensions
 
 These are not part of the model above.

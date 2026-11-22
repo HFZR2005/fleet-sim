@@ -117,10 +117,11 @@ class EquilibriumDiagnostics(BaseModel):
 class MarketDay(BaseModel):
     """One fleet-day solved in the loop.
 
-    ``added_load_gw`` is b* per slot and ``prices`` is P(b*). ``joint`` and
-    ``replanned`` are the two allocations of b* across homes (Open choices).
-    Both list every home, so the network can evaluate either; a home without
-    a battery is the same in both.
+    ``added_load_gw`` is b* per slot, ``prices`` is P(b*) and
+    ``historical_prices`` is P(0). ``joint`` and ``replanned`` are the two
+    allocations of b* across homes (Open choices). Both list every home, so
+    the network can evaluate either; a home without a battery is the same in
+    both. ``battery_home_ids`` names the homes with a battery.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -128,6 +129,8 @@ class MarketDay(BaseModel):
     day: date
     added_load_gw: list[float]
     prices: PriceSeries
+    historical_prices: PriceSeries
+    battery_home_ids: list[str]
     joint: list[SolvedHome]
     replanned: list[SolvedHome]
     diagnostics: EquilibriumDiagnostics
@@ -144,7 +147,13 @@ class MarketDay(BaseModel):
 
 
 class MarketMetrics(BaseModel):
-    """National and bill measures for one replication's days in the loop."""
+    """National and bill measures for one replication's days in the loop.
+
+    See ``docs/formulation.md``, Market measures. ``peak_added_load_hour`` is
+    the hour of day, 0 to 23, of the fleet's greatest net battery power.
+    ``net_power_per_battery_home_kw`` is the mean over days of
+    Σ_j n_jt / N_b in each slot, which is GW per million batteries.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -154,3 +163,4 @@ class MarketMetrics(BaseModel):
     non_battery_price_change_p_per_day: float
     mean_charge_price_p_per_kwh: float
     mean_discharge_price_p_per_kwh: float
+    net_power_per_battery_home_kw: list[float]
