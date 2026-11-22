@@ -99,6 +99,8 @@ def _market_blocks(level: MarketLevelResult, *, stubbed: bool) -> list[Table | T
         f"(MODE) breaks {d.mode_break_slots}, "
         f"largest re-plan saving {d.max_replan_saving_p:.2f} p, "
         f"total {d.total_replan_saving_p:.2f} p, "
+        f"{'above' if d.exceeds_tolerance else 'within'} tolerance, "
+        f"re-planned load differs by {d.replanned_load_difference_gw:.3f} GW, "
         f"out-of-range slots {d.out_of_range_slots}"
     )
     return [

@@ -96,8 +96,11 @@ class EquilibriumDiagnostics(BaseModel):
     See ``docs/formulation.md``, Computing it. ``linearisation_error_p_per_kwh``
     is max_t |P_t(b*_t) − σ_tk*|. ``mode_break_slots`` counts home-slots that
     charge and discharge together past 1e-6 kW. The re-plan savings are
-    (CHECK), in pence. ``out_of_range_slots`` counts slots where R_t + b*_t
-    leaves ``curve_range_gw``.
+    (CHECK), in pence, and ``exceeds_tolerance`` is set when the largest is
+    above ``MarketSettings.equilibrium_tolerance_p``.
+    ``replanned_load_difference_gw`` is max_t of |national load of the
+    re-planned allocation − b*_t| (Open choices). ``out_of_range_slots``
+    counts slots where R_t + b*_t leaves ``curve_range_gw``.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -106,6 +109,8 @@ class EquilibriumDiagnostics(BaseModel):
     mode_break_slots: int
     max_replan_saving_p: float
     total_replan_saving_p: float
+    exceeds_tolerance: bool
+    replanned_load_difference_gw: float
     out_of_range_slots: int
 
 
