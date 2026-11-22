@@ -69,4 +69,6 @@ Batteries that all charge in the same cheap half-hours raise the price of those 
 
 The main model divides price by the fuel cost of a gas plant before fitting. Raw prices in 2022 sit far above other years because gas was expensive, not because load was higher. After dividing by fuel cost the four years fall on one curve. The curve is exponential: it fits as well as any smooth shape, and its slope cannot turn negative. On 2025 it misses the price by 21.3 £/MWh (RMSE), against 19–36 £/MWh on the training years. The choice and the robustness models are explained in [ADR-0004](docs/decisions/0004-price-curve-model.md).
 
+Where the fleet charges, one extra gigawatt of load raises the wholesale price by about £4–6/MWh (0.4–0.6 p/kWh), more in years with dear gas. The curve is steeper where the fleet charges than where it discharges, so a growing fleet should raise its buying prices faster than it lowers its selling prices. The numbers are in [docs/results/price-curves.md](docs/results/price-curves.md).
+
 ![Price against residual load, raw and divided by fuel cost, 2021–2024](docs/fuel_adjustment.svg)

@@ -65,6 +65,7 @@ nav:
   - Results:
     - "Milestone 3 — Diversity": results/milestone-3.md
     - "Milestone 4 — Overloads": results/milestone-4.md
+    - "Milestone 4.5 — Price curves": results/price-curves.md
   - Decisions:
     - "ADR-0001: Network as a price": decisions/0001-network-as-a-price.md
     - "ADR-0002: Price data from May 2021": decisions/0002-price-data-from-may-2021.md
