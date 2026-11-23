@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from fleet_sim.models.home import SLOTS_PER_DAY, BatterySpec
+from fleet_sim.models.market import MarketSettings
 from fleet_sim.models.network import NetworkSettings
 from fleet_sim.models.prices import require_gsp_region
 
@@ -149,6 +150,7 @@ class Scenario(BaseModel):
     replications: int
     battery: BatteryDistribution
     network: NetworkSettings | None = None
+    market: MarketSettings | None = None
 
     @field_validator("n_homes", "replications", "seed", mode="before")
     @classmethod

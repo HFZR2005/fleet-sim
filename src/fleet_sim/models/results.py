@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fleet_sim.models.demand import DemandFallback
 from fleet_sim.models.fleet import FleetDay
+from fleet_sim.models.market import EquilibriumDiagnostics
 from fleet_sim.models.scenario import RunMetadata
 
 ComparisonName = Literal["with_batteries", "without_batteries", "diverse", "identical"]
@@ -232,6 +233,25 @@ class OverloadCrossing(BaseModel):
     interval_above_zero_from: float | None
 
 
+class MarketLevelResult(BaseModel):
+    """One (M, local penetration) point of a fleet-in-the-loop run.
+
+    ``joint_overload`` and ``replanned_overload`` are the milestone-4 overload
+    metrics under each allocation of b*. ``diagnostics`` is the worst of each
+    diagnostic over every replication and day: the largest error and saving,
+    and the summed counts.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    national_batteries: float
+    penetration: float
+    joint_overload: list[MetricEstimate]
+    replanned_overload: list[MetricEstimate]
+    market: list[MetricEstimate]
+    diagnostics: EquilibriumDiagnostics
+
+
 class ScenarioRun(BaseModel):
     """What ``run-scenario`` printed and where it wrote."""
 
@@ -258,4 +278,6 @@ class ScenarioRun(BaseModel):
     overload_figure: Path | None = None
     network_levels: list[NetworkLevelResult] = Field(default_factory=list)
     overload_crossing: OverloadCrossing | None = None
+    market_levels: list[MarketLevelResult] = Field(default_factory=list)
+    market_figure: Path | None = None
     stubs: list[str] = Field(default_factory=list)

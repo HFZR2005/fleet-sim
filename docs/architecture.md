@@ -1,6 +1,10 @@
 ---
 covers:
   - commands/network.py
+  - commands/market.py
+  - fleet/market.py
+  - models/market.py
+  - viz/market.py
   - fleet/generate.py
   - fleet/topology.py
   - fleet/network.py
@@ -50,6 +54,29 @@ A run draws a fleet, solves each home on its own, and reads the network off the 
 | `ReplicationOverload` | Share of transformers overloaded, mean and worst utilisation, total overload energy, the hour overloads occur most, hidden-overload share |
 
 A scenario with no `[network]` section does not enter this path. It still solves against one unconstrained root.
+
+## Fleet in the loop
+
+A scenario with a `[market]` section makes each home's tariff depend on what the whole fleet charges, through the price curve (`docs/formulation.md`, Fleet in the loop). It needs a `[network]` section too, and takes precedence over the plain network path. `commands/market.py` runs it.
+
+### Stages
+
+1. **Fleet and topology.** As in the network path: `build_topology` once, then `generate_fleet` and `assign_transformers` for each replication, national fleet size M and local penetration.
+2. **Price inputs.** `day_price_inputs` builds a `DayPriceInputs` for each day: residual load R, fuel cost k and wholesale price π per slot, and the historical Agile rates. Its `prices(added_load_gw)` method is (PRICE): the Agile rate in each slot when the fleet adds b GW.
+3. **Equilibrium.** `solve_market_day` solves the fleet-day as one linear program, (JOINT) subject to (LINK), and returns a `MarketDay`: the added load b*, the prices P(b*), and each home's schedule under two allocations. **Joint** is the LP's own schedule. **Re-planned** is each home solved alone at P(b*). It also returns `EquilibriumDiagnostics`.
+4. **Network.** `Network.evaluate` runs once per allocation per day, then `day_overload` and `summarise_replication` produce milestone-4 overload metrics for each allocation.
+5. **Metrics and report.** `market_metrics` reduces a replication's days to `MarketMetrics`. Replications go through `t_interval` into one `MarketLevelResult` per (M, penetration), and diagnostics keep their worst value. The command writes `frames.json` (joint allocation, first replication, last point), `metadata.json`, `metrics.json` and the market figure. `--release` stops before writing when any stub ran.
+
+### Types
+
+| Type | Role |
+| --- | --- |
+| `MarketSettings` | The `[market]` section: M (one value or a list), price model name and parameters file, segments K, equilibrium tolerance (pence per home per day), the curve's range of R + b |
+| `DayPriceInputs` | One UK day in one region: R, k, π (with censoring bounds) per slot, the historical rates, and `prices(b) -> PriceSeries` |
+| `MarketDay` | b* per slot (GW), P(b*), every home's schedule under the joint and re-planned allocations, and the diagnostics |
+| `EquilibriumDiagnostics` | Linearisation error (p/kWh), (MODE) breaks, largest and total re-plan saving (pence), slots with R + b outside the curve's range |
+| `MarketMetrics` | Per replication: peak added load and its hour, saving per battery home, price change for homes without a battery, mean charging and discharging price |
+| `MarketLevelResult` | One (M, penetration) point: market metrics and both allocations' overload metrics as intervals, and the worst diagnostics |
 
 ## Price curves
 
