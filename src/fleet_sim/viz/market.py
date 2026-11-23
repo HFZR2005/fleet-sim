@@ -38,7 +38,16 @@ from fleet_sim.viz.style import (
 _SAVING = "saving_per_battery_home_p_per_day"
 _OVERLOADED = "transformers_overloaded_share"
 _HOURS_PER_SLOT = 0.5
-_ALLOCATIONS = (("joint", "Joint"), ("replanned", "Re-planned"))
+_ALLOCATIONS = (
+    ("joint", "Solver picks who charges"),
+    ("replanned", "Each home plans alone"),
+)
+_MODEL_LABELS = {
+    "fuel_adjusted/exponential": "Main price curve",
+    "fuel_adjusted/signed_quadratic": "Steeper evening (quadratic)",
+    "fuel_adjusted/cubic": "Steepest evening (cubic)",
+}
+_SPREAD = {0.0: "batteries spread evenly", 0.8: "batteries clustered"}
 
 
 def read_market_sweep(path: Path) -> MarketSweep:
@@ -73,7 +82,7 @@ def plot_added_load(sweep: MarketSweep) -> Figure:
                 color=IMPORT_WITHOUT_BATTERY,
                 linewidth=LINE_WIDTH,
                 linestyle="--",
-                label="M = 0 (herd at historical prices)",
+                label="Prices ignore batteries (the herd)",
             )
         else:
             ax.plot(
@@ -117,9 +126,9 @@ def plot_saving_by_model(sweep: MarketSweep) -> Figure:
             color=colour,
             linewidth=LINE_WIDTH,
             marker="o",
-            label=model,
+            label=_MODEL_LABELS.get(model, model),
         )
-    ax.set_xlabel("National batteries M (millions)")
+    ax.set_xlabel("Batteries in Britain (millions)")
     ax.set_ylabel("Saving per battery\nhome (p/day)")
     ax.legend()
     style_axes(ax)
@@ -175,15 +184,17 @@ def plot_overload_by_penetration(sweep: MarketSweep) -> Figure:
                     marker="o",
                     label=_fleet_label(m),
                 )
-            ax.set_title(f"{title}, ρ = {rho:g}")
+            ax.set_title(f"{title}, {_SPREAD.get(rho, f'ρ = {rho:g}')}")
             if row == len(rhos) - 1:
-                ax.set_xlabel("Local penetration (%)")
+                ax.set_xlabel("Homes with a battery (%)")
             if column == 0:
                 ax.set_ylabel("Share of transformers\noverloaded")
             style_axes(ax)
+    # One legend under the grid: inside any panel it would cover lines.
     first = axes[0][0] if len(rhos) > 1 else axes[0]
-    first.legend()
-    figure.tight_layout()
+    handles, labels = first.get_legend_handles_labels()
+    figure.legend(handles, labels, loc="lower center", ncol=3)
+    figure.tight_layout(rect=(0, 0.1, 1, 1))
     return figure
 
 
@@ -225,5 +236,5 @@ def _fleet_colours(fleets: list[float]) -> dict[float, str]:
 
 def _fleet_label(national_batteries: float) -> str:
     if national_batteries == 0:
-        return "M = 0"
-    return f"M = {national_batteries / 1e6:g} million"
+        return "Prices ignore batteries"
+    return f"{national_batteries / 1e6:g} million batteries in Britain"
