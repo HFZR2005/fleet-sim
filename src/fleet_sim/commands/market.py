@@ -291,7 +291,10 @@ def _estimates(samples: dict[str, list[float]]) -> list[MetricEstimate]:
 
 
 def _worst(items: list[EquilibriumDiagnostics]) -> EquilibriumDiagnostics:
-    """The largest error and saving, and the summed counts, over ``items``."""
+    """The largest error, saving and load difference, and the summed counts.
+
+    A point exceeds the tolerance when any of its days does.
+    """
     return EquilibriumDiagnostics(
         linearisation_error_p_per_kwh=max(
             d.linearisation_error_p_per_kwh for d in items
@@ -299,6 +302,8 @@ def _worst(items: list[EquilibriumDiagnostics]) -> EquilibriumDiagnostics:
         mode_break_slots=sum(d.mode_break_slots for d in items),
         max_replan_saving_p=max(d.max_replan_saving_p for d in items),
         total_replan_saving_p=sum(d.total_replan_saving_p for d in items),
+        exceeds_tolerance=any(d.exceeds_tolerance for d in items),
+        replanned_load_difference_gw=max(d.replanned_load_difference_gw for d in items),
         out_of_range_slots=sum(d.out_of_range_slots for d in items),
     )
 

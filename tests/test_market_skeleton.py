@@ -14,8 +14,6 @@ _ROOT = Path(__file__).parents[1]
 _HOUSEHOLDS = _ROOT / "tests" / "fixtures" / "lcl_household_days.csv"
 _SCENARIO = _ROOT / "scenarios" / "smoke-market.toml"
 _STUBS = (
-    "solve_market_day",
-    "equilibrium_diagnostics",
     "market_metrics",
     "plot_market_placeholder",
 )
@@ -48,7 +46,7 @@ def test_release_fails_while_stubs_remain(
     code = main([*_argv(output, price_cache), "--release"])
 
     assert code == 1
-    assert "solve_market_day" in capsys.readouterr().err
+    assert "market_metrics" in capsys.readouterr().err
     assert not (output / "metrics.json").exists()
 
 
