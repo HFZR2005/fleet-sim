@@ -26,7 +26,8 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 
 - Read the issue you're working on with `gh issue view <number>` before planning.
 - Treat its acceptance criteria as the definition of done, and its "Out of scope" section as a hard limit.
-- Don't create, edit, comment on or close issues. Issues close when the PR that says "Closes #<number>" merges.
+- If a change has no issue, draft one in the same shape as the existing issues (scope, acceptance criteria, out of scope) and create it once the user has agreed to the text.
+- Don't edit, comment on or close issues. Issues close when the PR that says "Closes #<number>" merges.
 
 ## Stubs
 
