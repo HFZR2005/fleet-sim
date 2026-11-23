@@ -1,17 +1,22 @@
 """A scenario with a ``[market]`` section: the fleet in the loop.
 
-For each replication, national fleet size M and local penetration: draw the
-fleet on the scenario's topology, then for each day build the price inputs,
-solve the equilibrium, and evaluate the network under both allocations.
-Each day's price inputs are built once and shared by every replication.
-See ``docs/architecture.md``, Fleet in the loop.
+For each ρ, local penetration and replication: draw the fleet on the
+scenario's topology, then for each price model and national fleet size M
+solve each day's equilibrium and evaluate the network under both
+allocations. M = 0 is always solved, and every measure is paired with it on
+the same fleet and days. Only the headline point, the first ρ and the
+highest local penetration, is repeated under the robustness models. Each
+day's price inputs are built once per price model and shared by every
+replication. See ``docs/architecture.md``, Fleet in the loop.
 """
 
 import json
+import time
+from dataclasses import dataclass
 from datetime import date, timedelta
 from importlib.metadata import version
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from fleet_sim.data.households import HouseholdDemandPool
 from fleet_sim.experiments.report import replication_seed, t_interval
@@ -20,18 +25,28 @@ from fleet_sim.fleet.generate import generate_fleet, with_demand
 from fleet_sim.fleet.market import market_metrics, solve_market_day
 from fleet_sim.fleet.network import Network
 from fleet_sim.fleet.overload import day_overload, summarise_replication
-from fleet_sim.fleet.price_inputs import DayPriceInputs, day_price_inputs
+from fleet_sim.fleet.price_inputs import day_price_inputs
 from fleet_sim.fleet.topology import assign_transformers, build_topology
-from fleet_sim.models.fleet import FleetDay
+from fleet_sim.models.fleet import Fleet, FleetDay
 from fleet_sim.models.frames import Frame
-from fleet_sim.models.market import EquilibriumDiagnostics, MarketDay, MarketSettings
+from fleet_sim.models.market import (
+    DiagnosticsRecord,
+    EquilibriumDiagnostics,
+    MarketDay,
+)
 from fleet_sim.models.network import (
     DayOverload,
     HomeProfile,
     NetworkSpec,
     ReplicationOverload,
 )
-from fleet_sim.models.results import MarketLevelResult, MetricEstimate, ScenarioRun
+from fleet_sim.models.results import (
+    MarketLevelResult,
+    MarketSweep,
+    MetricEstimate,
+    PairedDifference,
+    ScenarioRun,
+)
 from fleet_sim.models.scenario import RunMetadata, Scenario
 from fleet_sim.prices.config import load_config
 from fleet_sim.prices.parameters import load_price_model
@@ -39,13 +54,19 @@ from fleet_sim.progress import RunProgress
 from fleet_sim.random_streams import RandomStreams
 from fleet_sim.scenario import git_commit
 from fleet_sim.stubs import active_stubs, begin_stub_run, require_no_stubs
-from fleet_sim.viz.market import plot_market_placeholder
+from fleet_sim.viz.market import (
+    plot_added_load,
+    plot_overload_by_penetration,
+    plot_saving_by_model,
+    read_market_sweep,
+)
 from fleet_sim.viz.save import save_figure
 
 _PACKAGE = "fleet-sim"
 _CALIBRATION = Path("calibration/price_curves.toml")
 
 Allocation = Literal["joint", "replanned"]
+_GROUPS = ("market", "joint", "replanned")
 _OVERLOAD_METRICS = (
     "transformers_overloaded_share",
     "mean_peak_utilisation",
@@ -55,14 +76,34 @@ _OVERLOAD_METRICS = (
 )
 _MARKET_METRICS = (
     "peak_added_load_gw",
+    "peak_added_load_hour",
     "saving_per_battery_home_p_per_day",
     "non_battery_price_change_p_per_day",
     "mean_charge_price_p_per_kwh",
     "mean_discharge_price_p_per_kwh",
 )
 
-# samples[(M, penetration)][group][metric] -> one value per replication
-_Samples = dict[tuple[float, float], dict[str, dict[str, list[float]]]]
+
+class _Point(NamedTuple):
+    """One sweep point: a price model, ρ, national fleet M and penetration."""
+
+    price_model: str
+    rho: float
+    national_batteries: float
+    penetration: float
+
+
+@dataclass
+class _Samples:
+    """One point's measures, one value per replication.
+
+    ``values[group][metric]`` with group ``market``, ``joint`` or
+    ``replanned``; ``net_power_kw`` holds each replication's profile.
+    """
+
+    values: dict[str, dict[str, list[float]]]
+    net_power_kw: list[list[float]]
+    diagnostics: list[EquilibriumDiagnostics]
 
 
 def run_market_scenario(
@@ -88,94 +129,131 @@ def run_market_scenario(
         raise ValueError(
             f"a t-interval needs at least 2 replications (got {scenario.replications})"
         )
+    started = time.perf_counter()
     begin_stub_run()
     settings = scenario.market
     levels = settings.national_battery_levels()
+    if 0.0 not in levels:
+        levels = [0.0, *levels]
     penetrations = scenario.penetration_levels()
+    rhos = scenario.network.rho_levels()
+    models = settings.price_models()
+    headline = (rhos[0], max(penetrations))
     dates = _dates(scenario.start, scenario.end)
     calibration = load_config(_CALIBRATION)
-    model = load_price_model(settings.price_parameters_file, settings.price_model)
     price_cache = Path(calibration.data.cache_dir) if cache_dir is None else cache_dir
-    inputs = [
-        day_price_inputs(
-            day,
-            scenario.region,
-            price_cache,
-            model=model,
-            fuel_cost=calibration.fuel_cost,
-        )
-        for day in dates
+    inputs = {
+        name: [
+            day_price_inputs(
+                day,
+                scenario.region,
+                price_cache,
+                model=load_price_model(settings.price_parameters_file, name),
+                fuel_cost=calibration.fuel_cost,
+            )
+            for day in dates
+        ]
+        for name in models
+    }
+
+    def models_at(rho: float, penetration: float) -> list[str]:
+        return models if (rho, penetration) == headline else models[:1]
+
+    points = [
+        _Point(name, rho, m, p)
+        for rho in rhos
+        for p in penetrations
+        for name in models_at(rho, p)
+        for m in levels
     ]
+    solve_count = scenario.replications * len(points) * len(dates)
     if progress is not None:
-        progress.task(
-            "Market",
-            scenario.replications * len(levels) * len(penetrations) * len(dates),
-        )
+        progress.task("Market", solve_count)
     home_ids = [f"home-{i + 1}" for i in range(scenario.n_homes)]
     spec = build_topology(home_ids, scenario.network, RandomStreams(scenario.seed))
 
-    points = [(m, p) for m in levels for p in penetrations]
-    samples: _Samples = {
-        point: {
-            "joint": {name: [] for name in _OVERLOAD_METRICS},
-            "replanned": {name: [] for name in _OVERLOAD_METRICS},
-            "market": {name: [] for name in _MARKET_METRICS},
-        }
+    samples = {
+        point: _Samples(
+            values={
+                "market": {name: [] for name in _MARKET_METRICS},
+                "joint": {name: [] for name in _OVERLOAD_METRICS},
+                "replanned": {name: [] for name in _OVERLOAD_METRICS},
+            },
+            net_power_kw=[],
+            diagnostics=[],
+        )
         for point in points
     }
-    diagnostics: dict[tuple[float, float], list[EquilibriumDiagnostics]] = {
-        point: [] for point in points
-    }
+    records: list[DiagnosticsRecord] = []
     frames: list[Frame] = []
+    frame_point = _Point(models[0], headline[0], levels[-1], headline[1])
 
-    for index in range(scenario.replications):
-        seed = replication_seed(scenario.seed, index)
-        for national_batteries, penetration in points:
-            label = (
-                f"replication {index + 1}/{scenario.replications}, "
-                f"M {national_batteries:,.0f}, penetration {penetration:.0%}"
-            )
-            days = _run_days(
-                scenario,
-                settings,
-                pool,
-                spec,
-                national_batteries,
-                penetration,
-                seed,
-                inputs,
-                progress,
-                label,
-            )
-            group = samples[(national_batteries, penetration)]
-            joint = _overload(spec, days, "joint")
-            replanned = _overload(spec, days, "replanned")
-            metrics = market_metrics(days)
-            for name in _OVERLOAD_METRICS:
-                group["joint"][name].append(float(getattr(joint, name)))
-                group["replanned"][name].append(float(getattr(replanned, name)))
-            for name in _MARKET_METRICS:
-                group["market"][name].append(float(getattr(metrics, name)))
-            diagnostics[(national_batteries, penetration)].extend(
-                day.diagnostics for day in days
-            )
-            if index == 0 and (national_batteries, penetration) == points[-1]:
-                for day in days:
-                    frames.extend(
-                        frames_for_day(day.prices, _fleet_day(spec, day, "joint"))
-                    )
+    for rho in rhos:
+        for penetration in penetrations:
+            for index in range(scenario.replications):
+                fleets = _draw_fleets(
+                    scenario,
+                    pool,
+                    spec,
+                    rho,
+                    penetration,
+                    replication_seed(scenario.seed, index),
+                    dates,
+                )
+                for name in models_at(rho, penetration):
+                    for national_batteries in levels:
+                        point = _Point(name, rho, national_batteries, penetration)
+                        label = (
+                            f"replication {index + 1}/{scenario.replications}, "
+                            f"{name}, ρ {rho}, M {national_batteries:,.0f}, "
+                            f"penetration {penetration:.0%}"
+                        )
+                        days: list[MarketDay] = []
+                        for fleet, day_inputs in zip(fleets, inputs[name], strict=True):
+                            if progress is not None:
+                                progress.detail(f"{label}, {day_inputs.day}")
+                            days.append(
+                                solve_market_day(
+                                    fleet, day_inputs, national_batteries, settings
+                                )
+                            )
+                            if progress is not None:
+                                progress.advance()
+                        _record(samples[point], spec, days)
+                        records.extend(
+                            DiagnosticsRecord(
+                                price_model=name,
+                                rho=rho,
+                                national_batteries=national_batteries,
+                                penetration=penetration,
+                                replication=index,
+                                day=day.day,
+                                diagnostics=day.diagnostics,
+                            )
+                            for day in days
+                        )
+                        if index == 0 and point == frame_point:
+                            for day in days:
+                                frames.extend(
+                                    frames_for_day(
+                                        day.prices, _fleet_day(spec, day, "joint")
+                                    )
+                                )
 
     market_levels = [
-        MarketLevelResult(
-            national_batteries=m,
-            penetration=p,
-            joint_overload=_estimates(samples[(m, p)]["joint"]),
-            replanned_overload=_estimates(samples[(m, p)]["replanned"]),
-            market=_estimates(samples[(m, p)]["market"]),
-            diagnostics=_worst(diagnostics[(m, p)]),
-        )
-        for m, p in points
+        _level(point, samples[point], samples[point._replace(national_batteries=0.0)])
+        for point in points
     ]
+    sweep = MarketSweep(
+        price_model=models[0],
+        robustness_models=models[1:],
+        headline_rho=headline[0],
+        headline_penetration=headline[1],
+        solve_count=solve_count,
+        wall_time_s=time.perf_counter() - started,
+        diagnostics=_worst([level.diagnostics for level in market_levels]),
+        levels=market_levels,
+    )
     if release:
         require_no_stubs()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -188,17 +266,25 @@ def run_market_scenario(
     frames_path = output_dir / "frames.json"
     metadata_path = output_dir / "metadata.json"
     metrics_path = output_dir / "metrics.json"
+    diagnostics_path = output_dir / "diagnostics.json"
     write_frames(frames_path, frames, metadata=metadata)
     _write_json(metadata_path, metadata.model_dump(mode="json"))
-    market_figure = output_dir / "market"
-    save_figure(plot_market_placeholder(market_levels), market_figure)
+    _write_json(
+        diagnostics_path, [record.model_dump(mode="json") for record in records]
+    )
     _write_json(
         metrics_path,
-        {
-            "stubs": active_stubs(),
-            "market_levels": [level.model_dump(mode="json") for level in market_levels],
-        },
+        {"stubs": active_stubs(), "market": sweep.model_dump(mode="json")},
     )
+    saved = read_market_sweep(metrics_path)
+    figures = [
+        output_dir / "added_load",
+        output_dir / "saving_by_model",
+        output_dir / "overload_by_penetration",
+    ]
+    save_figure(plot_added_load(saved), figures[0])
+    save_figure(plot_saving_by_model(saved), figures[1])
+    save_figure(plot_overload_by_penetration(saved), figures[2])
     return ScenarioRun(
         n_homes=scenario.n_homes,
         region=scenario.region,
@@ -206,7 +292,7 @@ def run_market_scenario(
         end=scenario.end,
         replications=scenario.replications,
         mode=scenario.mode,
-        penetration=penetrations[-1],
+        penetration=headline[1],
         metrics=[],
         without_batteries=[],
         diversity=[],
@@ -216,26 +302,23 @@ def run_market_scenario(
         frames_path=frames_path,
         metadata_path=metadata_path,
         metrics_path=metrics_path,
-        market_levels=market_levels,
-        market_figure=market_figure,
+        market=sweep,
+        market_figures=figures,
+        diagnostics_path=diagnostics_path,
         stubs=active_stubs(),
     )
 
 
-def _run_days(
+def _draw_fleets(
     scenario: Scenario,
-    settings: MarketSettings,
     pool: HouseholdDemandPool,
     spec: NetworkSpec,
-    national_batteries: float,
+    rho: float,
     penetration: float,
     seed: int,
-    inputs: list[DayPriceInputs],
-    progress: RunProgress | None,
-    label: str,
-) -> list[MarketDay]:
-    """Draw one fleet and solve each of its days in the loop."""
-    assert scenario.network is not None
+    dates: list[date],
+) -> list[Fleet]:
+    """One replication's fleet on each day, shared by every model and M."""
     generated = generate_fleet(
         pool,
         scenario.start,
@@ -246,18 +329,52 @@ def _run_days(
         mode="diverse",
         distribution=scenario.battery,
         transformer_map=spec.home_transformer,
-        rho=scenario.network.rho,
+        rho=rho,
     )
     base = assign_transformers(generated.fleet, spec)
-    days: list[MarketDay] = []
-    for day_inputs in inputs:
-        if progress is not None:
-            progress.detail(f"{label}, {day_inputs.day.isoformat()}")
-        fleet = with_demand(base, pool, day_inputs.day).fleet
-        days.append(solve_market_day(fleet, day_inputs, national_batteries, settings))
-        if progress is not None:
-            progress.advance()
-    return days
+    return [with_demand(base, pool, day).fleet for day in dates]
+
+
+def _record(samples: _Samples, spec: NetworkSpec, days: list[MarketDay]) -> None:
+    """Add one replication's market and overload measures to ``samples``."""
+    metrics = market_metrics(days)
+    overloads = {
+        "joint": _overload(spec, days, "joint"),
+        "replanned": _overload(spec, days, "replanned"),
+    }
+    for name in _MARKET_METRICS:
+        samples.values["market"][name].append(float(getattr(metrics, name)))
+    for allocation, overload in overloads.items():
+        for name in _OVERLOAD_METRICS:
+            samples.values[allocation][name].append(float(getattr(overload, name)))
+    samples.net_power_kw.append(metrics.net_power_per_battery_home_kw)
+    samples.diagnostics.extend(day.diagnostics for day in days)
+
+
+def _level(point: _Point, samples: _Samples, baseline: _Samples) -> MarketLevelResult:
+    """Intervals for one point, and its paired differences from M = 0."""
+    changes = {
+        group: _paired(samples.values[group], baseline.values[group])
+        for group in _GROUPS
+    }
+    replications = len(samples.net_power_kw)
+    return MarketLevelResult(
+        price_model=point.price_model,
+        rho=point.rho,
+        national_batteries=point.national_batteries,
+        penetration=point.penetration,
+        market=_estimates(samples.values["market"]),
+        joint_overload=_estimates(samples.values["joint"]),
+        replanned_overload=_estimates(samples.values["replanned"]),
+        market_change=changes["market"],
+        joint_overload_change=changes["joint"],
+        replanned_overload_change=changes["replanned"],
+        net_power_per_battery_home_kw=[
+            sum(profile[slot] for profile in samples.net_power_kw) / replications
+            for slot in range(len(samples.net_power_kw[0]))
+        ],
+        diagnostics=_worst(samples.diagnostics),
+    )
 
 
 def _fleet_day(spec: NetworkSpec, day: MarketDay, allocation: Allocation) -> FleetDay:
@@ -286,6 +403,23 @@ def _overload(
 def _estimates(samples: dict[str, list[float]]) -> list[MetricEstimate]:
     return [
         MetricEstimate(metric=name, interval=t_interval(values))
+        for name, values in samples.items()
+    ]
+
+
+def _paired(
+    samples: dict[str, list[float]], baseline: dict[str, list[float]]
+) -> list[PairedDifference]:
+    """In the loop minus M = 0, replication by replication."""
+    return [
+        PairedDifference(
+            metric=name,
+            left="in_the_loop",
+            right="historical_prices",
+            interval=t_interval(
+                [a - b for a, b in zip(values, baseline[name], strict=True)]
+            ),
+        )
         for name, values in samples.items()
     ]
 

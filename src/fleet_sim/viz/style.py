@@ -26,6 +26,9 @@ YEAR_COLOURMAP = "Blues"
 # One colour per price-curve family, in the order of ``FAMILIES``.  Checked
 # for colour-blind separation between neighbouring bars.
 FAMILY_COLOURS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4")
+# National fleet sizes M are ordered, so they take steps of one sequential
+# colour map. M = 0 uses IMPORT_WITHOUT_BATTERY.
+NATIONAL_FLEET_COLOURMAP = "Blues"
 
 FONT_FAMILY = "DejaVu Sans"
 FONT_SIZE = 11.0
@@ -43,6 +46,8 @@ UTILISATION_FIGURE_INCHES = (7.2, 3.6)
 PRICE_CURVE_FIGURE_INCHES = (7.2, 4.8)
 EVALUATION_FIGURE_INCHES = (10.8, 4.6)
 SLOPES_FIGURE_INCHES = (10.8, 6.0)
+MARKET_FIGURE_INCHES = (7.2, 3.8)
+OVERLOAD_GRID_FIGURE_INCHES = (10.8, 6.0)
 
 
 def apply_style() -> None:

@@ -37,7 +37,7 @@ def _network_settings(**overrides: object) -> NetworkSettings:
         "lon_max": 0.1,
     }
     defaults.update(overrides)
-    return NetworkSettings(**defaults)
+    return NetworkSettings.model_validate(defaults)
 
 
 class TestRhoZeroRegression:

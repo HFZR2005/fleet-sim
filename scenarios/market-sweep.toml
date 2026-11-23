@@ -1,0 +1,51 @@
+# The fleet in the loop, national × local: M national batteries move the
+# price, local penetration and clustering (rho) move the transformers. Same
+# topology, days and battery catalogue as network-sweep.toml. M = 0, the
+# paired historical-price run, is always included. The headline point
+# (rho = 0, penetration 1.0) is repeated under the robustness price models.
+
+n_homes = 50
+penetration = [0.1, 0.25, 0.5, 1.0]
+mode = "diverse"
+region = "C"
+start = 2026-01-05
+end = 2026-01-11
+seed = 1
+replications = 10
+
+[market]
+national_batteries = [0, 500000, 1000000, 2000000, 4000000]
+price_model = "fuel_adjusted/exponential"
+robustness_models = ["fuel_adjusted/signed_quadratic", "fuel_adjusted/cubic"]
+
+[network]
+n_transformers = 4
+rho = [0.0, 0.8]
+admd_kw = 2.0
+headroom = 1.0
+power_factor = 0.95
+ratings_kva = [25.0, 50.0, 100.0]
+
+[battery]
+soc_initial = 0.5
+
+[[battery.products]]
+capacity_kwh = 5.0
+power_kw = [3.6]
+weight = 1.0
+
+[[battery.products]]
+capacity_kwh = 10.0
+power_kw = [3.6, 5.0]
+weight = 1.0
+
+[[battery.products]]
+capacity_kwh = 13.5
+power_kw = [5.0]
+weight = 1.0
+
+[battery.efficiency]
+mean = 0.95
+standard_deviation = 0.01
+low = 0.92
+high = 0.97

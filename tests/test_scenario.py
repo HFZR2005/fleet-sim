@@ -52,6 +52,7 @@ def test_example_scenarios_load() -> None:
     identical = load_scenario(_ROOT / "scenarios" / "identical.toml")
     diverse = load_scenario(_ROOT / "scenarios" / "diverse.toml")
     sweep = load_scenario(_ROOT / "scenarios" / "penetration-sweep.toml")
+    market = load_scenario(_ROOT / "scenarios" / "market-sweep.toml")
 
     assert identical.mode == "identical"
     assert identical.penetration == 1.0
@@ -59,6 +60,11 @@ def test_example_scenarios_load() -> None:
     assert diverse.n_homes == 8
     assert diverse.seed == 1
     assert sweep.penetration_levels() == [0.0, 0.1, 0.25, 0.5, 0.75, 1.0]
+    assert market.market is not None and market.network is not None
+    assert market.market.national_battery_levels() == [0, 5e5, 1e6, 2e6, 4e6]
+    assert market.network.rho_levels() == [0.0, 0.8]
+    assert market.penetration_levels() == [0.1, 0.25, 0.5, 1.0]
+    assert load_scenario(_ROOT / "scenarios" / "market.toml").market is not None
 
 
 def test_a_scenario_rejects_a_bad_field(tmp_path: Path) -> None:
@@ -86,6 +92,12 @@ def test_a_scenario_rejects_a_bad_field(tmp_path: Path) -> None:
         ("national_batteries", [0, -5], "national_batteries must be at least 0"),
         ("price_model", "fuel_adjusted/", "price_model must be target/family"),
         ("price_model", "exponential", "price_model must be target/family"),
+        ("robustness_models", ["cubic"], "robustness_models must be target/family"),
+        (
+            "robustness_models",
+            ["fuel_adjusted/exponential"],
+            "robustness_models must not include price_model",
+        ),
         ("segments", 0, "segments must be at least 1"),
         ("equilibrium_tolerance_p", -0.1, "equilibrium_tolerance_p must be at least 0"),
         ("curve_range_gw", [42.0, -0.5], "curve_range_gw must have low < high"),

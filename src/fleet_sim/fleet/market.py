@@ -25,7 +25,6 @@ from fleet_sim.models.market import (
 )
 from fleet_sim.models.prices import PriceSeries, require_gsp_region
 from fleet_sim.optimise.home import SLOT_HOURS, HomeProblem, build_home
-from fleet_sim.stubs import stub
 
 # A home-slot whose charge and discharge both exceed this charges and
 # discharges together, against (MODE).
@@ -267,7 +266,9 @@ def solve_market_day(
     ]
     power_kw = sum(d.battery.max_charge_kw + d.battery.max_discharge_kw for d in days)
     if national_batteries == 0 or power_kw == 0:
-        return _historical_day(fleet, inputs, historical, settings)
+        return _historical_day(
+            fleet, inputs, historical, [day.home_id for day in days], settings
+        )
 
     kappa = national_batteries / (len(days) * 1e6)
     problem = build_fleet(days, kappa, inputs, settings.segments)
@@ -311,6 +312,8 @@ def solve_market_day(
         day=prices.day,
         added_load_gw=added_load_gw,
         prices=prices,
+        historical_prices=historical,
+        battery_home_ids=[day.home_id for day in days],
         joint=joint,
         replanned=replanned,
         diagnostics=diagnostics,
@@ -321,6 +324,7 @@ def _historical_day(
     fleet: Fleet,
     inputs: DayPricing,
     historical: PriceSeries,
+    battery_home_ids: list[str],
     settings: MarketSettings,
 ) -> MarketDay:
     """b = 0: every home solved at the historical rates, as in milestone 4."""
@@ -330,6 +334,8 @@ def _historical_day(
         day=historical.day,
         added_load_gw=added_load_gw,
         prices=historical,
+        historical_prices=historical,
+        battery_home_ids=battery_home_ids,
         joint=homes,
         replanned=homes,
         diagnostics=EquilibriumDiagnostics(
@@ -410,16 +416,75 @@ def _diagnostics(
     )
 
 
-@stub("returns zeros")
 def market_metrics(days: list[MarketDay]) -> MarketMetrics:
-    """National added load, bills and prices over one replication's days."""
+    """National added load, bills and prices over one replication's days.
+
+    ``docs/formulation.md``, Market measures. Days d = 1..D, battery homes B
+    with N_b = |B|, N homes, p*_dt = P_t(b*_dt), p⁰_dt = P_t(0), and each
+    battery home's joint schedule c, d, g with n = c − d.
+
+    - Peak added load: max_{d,t} b*_dt, in GW. Its hour is ⌊t / 2⌋ for the
+      earliest slot with the greatest Σ_{j∈B} n_jdt over all days, so with
+      M = 0 it is the hour of the herd at historical prices.
+    - Saving per battery home, in p/day:
+          S = Δ / (D N_b) Σ_d Σ_{j∈B} Σ_t p*_dt (L_jdt − g_jdt).
+    - Price change without a battery, in p/day, over every home's demand:
+          C = Δ / (D N) Σ_d Σ_j Σ_t (p*_dt − p⁰_dt) L_jdt.
+    - Mean charging price Σ p*_dt c_jdt / Σ c_jdt and mean discharging price
+      Σ p*_dt d_jdt / Σ d_jdt, summed over d, t and j ∈ B, in p/kWh.
+    - Net power per battery home: (1 / (D N_b)) Σ_d Σ_{j∈B} n_jdt per slot,
+      in kW, which is GW per million batteries.
+
+    S depends only on b*, so it does not matter which equilibrium allocation
+    the joint program returned.
+    """
     if len(days) == 0:
         raise ValueError("market metrics need at least one day")
+    battery_homes = len(days[0].battery_home_ids)
+    if battery_homes == 0:
+        raise ValueError("market metrics need at least one battery home")
+    n_homes = len(days[0].joint)
+
+    net_kw = np.zeros((len(days), SLOTS_PER_DAY), dtype=np.float64)
+    saving_p = 0.0
+    change_p = 0.0
+    charge_kwh = 0.0
+    charge_p = 0.0
+    discharge_kwh = 0.0
+    discharge_p = 0.0
+    for index, day in enumerate(days):
+        price = np.asarray(day.prices.price_p_per_kwh, dtype=np.float64)
+        historical = np.asarray(day.historical_prices.price_p_per_kwh)
+        batteries = set(day.battery_home_ids)
+        for home in day.joint:
+            demand = np.asarray(home.demand_kw, dtype=np.float64)
+            change_p += SLOT_HOURS * float(np.dot(price - historical, demand))
+            if home.home_id not in batteries:
+                continue
+            schedule = home.schedule
+            charge = np.asarray(schedule.charge_kw, dtype=np.float64)
+            discharge = np.asarray(schedule.discharge_kw, dtype=np.float64)
+            grid = np.asarray(schedule.grid_import_kw, dtype=np.float64)
+            net_kw[index] += charge - discharge
+            saving_p += SLOT_HOURS * float(np.dot(price, demand - grid))
+            charge_kwh += SLOT_HOURS * float(charge.sum())
+            charge_p += SLOT_HOURS * float(np.dot(price, charge))
+            discharge_kwh += SLOT_HOURS * float(discharge.sum())
+            discharge_p += SLOT_HOURS * float(np.dot(price, discharge))
+    if charge_kwh <= 0 or discharge_kwh <= 0:
+        raise ValueError(
+            "mean charging and discharging prices need the fleet to charge "
+            "and discharge on some day"
+        )
+    peak_slot = int(np.argmax(net_kw.max(axis=0)))
     return MarketMetrics(
-        peak_added_load_gw=0.0,
-        peak_added_load_hour=0,
-        saving_per_battery_home_p_per_day=0.0,
-        non_battery_price_change_p_per_day=0.0,
-        mean_charge_price_p_per_kwh=0.0,
-        mean_discharge_price_p_per_kwh=0.0,
+        peak_added_load_gw=max(max(day.added_load_gw) for day in days),
+        peak_added_load_hour=peak_slot // 2,
+        saving_per_battery_home_p_per_day=saving_p / (len(days) * battery_homes),
+        non_battery_price_change_p_per_day=change_p / (len(days) * n_homes),
+        mean_charge_price_p_per_kwh=charge_p / charge_kwh,
+        mean_discharge_price_p_per_kwh=discharge_p / discharge_kwh,
+        net_power_per_battery_home_kw=[
+            float(value) for value in net_kw.mean(axis=0) / battery_homes
+        ],
     )

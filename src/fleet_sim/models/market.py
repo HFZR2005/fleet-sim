@@ -5,8 +5,9 @@ See ``docs/formulation.md``, Fleet in the loop, and ``docs/architecture.md``.
 
 from datetime import date
 from pathlib import Path
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from fleet_sim.models.fleet import SolvedHome
 from fleet_sim.models.home import SLOTS_PER_DAY
@@ -17,9 +18,11 @@ class MarketSettings(BaseModel):
     """The ``[market]`` section of a scenario.
 
     ``national_batteries`` is M in (LOAD): one value, or a list for the
-    sweep. ``price_model`` names a ``target/family`` in
-    ``price_parameters_file``; whether that model exists is checked when it
-    is loaded. ``segments`` is K in (SEGMENT).
+    sweep; M = 0 is always run, as the paired comparison. ``price_model``
+    names a ``target/family`` in ``price_parameters_file``; whether that
+    model exists is checked when it is loaded. ``robustness_models`` are
+    further models the headline point is repeated under, at every M.
+    ``segments`` is K in (SEGMENT).
     ``equilibrium_tolerance_p`` flags a run whose largest re-plan saving
     (CHECK) exceeds it, in pence per home per day. ``curve_range_gw`` is the
     range of R + b the curve was fitted on; slots outside it are counted.
@@ -29,6 +32,7 @@ class MarketSettings(BaseModel):
 
     national_batteries: float | list[float]
     price_model: str = "fuel_adjusted/exponential"
+    robustness_models: list[str] = Field(default_factory=list)
     price_parameters_file: Path = Path("calibration/price_curves.json")
     segments: int = 40
     equilibrium_tolerance_p: float = 1.0
@@ -54,10 +58,24 @@ class MarketSettings(BaseModel):
     @field_validator("price_model")
     @classmethod
     def model_is_a_target_and_family(cls, value: str) -> str:
-        target, slash, family = value.partition("/")
-        if not slash or not target or not family or "/" in family:
-            raise ValueError(f"price_model must be target/family (got {value!r})")
+        return _model_name(value, "price_model")
+
+    @field_validator("robustness_models")
+    @classmethod
+    def models_are_targets_and_families(cls, value: list[str]) -> list[str]:
+        for name in value:
+            _model_name(name, "robustness_models")
+        if len(set(value)) != len(value):
+            raise ValueError(f"robustness_models must not repeat (got {value})")
         return value
+
+    @model_validator(mode="after")
+    def robustness_differs_from_the_main_model(self) -> Self:
+        if self.price_model in self.robustness_models:
+            raise ValueError(
+                f"robustness_models must not include price_model {self.price_model!r}"
+            )
+        return self
 
     @field_validator("segments")
     @classmethod
@@ -89,6 +107,17 @@ class MarketSettings(BaseModel):
             return list(self.national_batteries)
         return [self.national_batteries]
 
+    def price_models(self) -> list[str]:
+        """The main price model, then each robustness model."""
+        return [self.price_model, *self.robustness_models]
+
+
+def _model_name(value: str, field: str) -> str:
+    target, slash, family = value.partition("/")
+    if not slash or not target or not family or "/" in family:
+        raise ValueError(f"{field} must be target/family (got {value!r})")
+    return value
+
 
 class EquilibriumDiagnostics(BaseModel):
     """How far one fleet-day's solve is from an exact equilibrium.
@@ -117,10 +146,11 @@ class EquilibriumDiagnostics(BaseModel):
 class MarketDay(BaseModel):
     """One fleet-day solved in the loop.
 
-    ``added_load_gw`` is b* per slot and ``prices`` is P(b*). ``joint`` and
-    ``replanned`` are the two allocations of b* across homes (Open choices).
-    Both list every home, so the network can evaluate either; a home without
-    a battery is the same in both.
+    ``added_load_gw`` is b* per slot, ``prices`` is P(b*) and
+    ``historical_prices`` is P(0). ``joint`` and ``replanned`` are the two
+    allocations of b* across homes (Open choices). Both list every home, so
+    the network can evaluate either; a home without a battery is the same in
+    both. ``battery_home_ids`` names the homes with a battery.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -128,6 +158,8 @@ class MarketDay(BaseModel):
     day: date
     added_load_gw: list[float]
     prices: PriceSeries
+    historical_prices: PriceSeries
+    battery_home_ids: list[str]
     joint: list[SolvedHome]
     replanned: list[SolvedHome]
     diagnostics: EquilibriumDiagnostics
@@ -144,7 +176,13 @@ class MarketDay(BaseModel):
 
 
 class MarketMetrics(BaseModel):
-    """National and bill measures for one replication's days in the loop."""
+    """National and bill measures for one replication's days in the loop.
+
+    See ``docs/formulation.md``, Market measures. ``peak_added_load_hour`` is
+    the hour of day, 0 to 23, of the fleet's greatest net battery power.
+    ``net_power_per_battery_home_kw`` is the mean over days of
+    Σ_j n_jt / N_b in each slot, which is GW per million batteries.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -154,3 +192,21 @@ class MarketMetrics(BaseModel):
     non_battery_price_change_p_per_day: float
     mean_charge_price_p_per_kwh: float
     mean_discharge_price_p_per_kwh: float
+    net_power_per_battery_home_kw: list[float]
+
+
+class DiagnosticsRecord(BaseModel):
+    """One fleet-day's diagnostics, as ``diagnostics.json`` logs them.
+
+    ``replication`` counts from 0.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    price_model: str
+    rho: float
+    national_batteries: float
+    penetration: float
+    replication: int
+    day: date
+    diagnostics: EquilibriumDiagnostics

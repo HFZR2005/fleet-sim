@@ -1,5 +1,6 @@
 # The fleet in the loop, smallest run: two homes on two transformers, one
-# day, two values of the national fleet M, two replications.
+# day, two values of the national fleet M and of rho, one robustness model,
+# two replications.
 # The Low Carbon London fixture used in tests has two households, so the
 # fleet stays within that pool. Half the homes have a battery.
 
@@ -14,10 +15,11 @@ replications = 2
 
 [market]
 national_batteries = [0, 1000000]
+robustness_models = ["fuel_adjusted/cubic"]
 
 [network]
 n_transformers = 2
-rho = 0.0
+rho = [0.0, 0.8]
 lat_min = 51.3
 lat_max = 51.7
 lon_min = -0.3

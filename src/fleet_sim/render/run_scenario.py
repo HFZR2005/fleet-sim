@@ -1,5 +1,6 @@
 """Rich view of a ``run-scenario`` result."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from rich.console import Console, Group
@@ -8,7 +9,7 @@ from rich.text import Text
 
 from fleet_sim.models.results import (
     ConfidenceInterval,
-    MarketLevelResult,
+    MarketSweep,
     MetricEstimate,
     PairedDifference,
     ScenarioRun,
@@ -26,11 +27,16 @@ _LABELS = {
     "worst_peak_utilisation": "Worst peak utilisation",
     "total_overload_energy_kwh": "Total overload energy (kWh)",
     "hidden_overload_share": "Hidden overload share",
+}
+
+_OVERLOADED = "transformers_overloaded_share"
+_MARKET_LABELS = {
     "peak_added_load_gw": "Peak added load (GW)",
+    "peak_added_load_hour": "Peak hour",
     "saving_per_battery_home_p_per_day": "Saving per battery home (p/day)",
     "non_battery_price_change_p_per_day": "Price change, no battery (p/day)",
-    "mean_charge_price_p_per_kwh": "Mean charging price (p/kWh)",
-    "mean_discharge_price_p_per_kwh": "Mean discharging price (p/kWh)",
+    "mean_charge_price_p_per_kwh": "Charging price (p/kWh)",
+    "mean_discharge_price_p_per_kwh": "Discharging price (p/kWh)",
 }
 
 
@@ -56,8 +62,8 @@ def run_scenario_view(result: ScenarioRun) -> Group:
         blocks.append(_penetration_table(result))
     if len(result.network_levels) > 1:
         blocks.append(_network_penetration_table(result))
-    for market in result.market_levels:
-        blocks.extend(_market_blocks(market, stubbed=bool(result.stubs)))
+    if result.market is not None:
+        blocks.extend(_market_blocks(result.market, stubbed=bool(result.stubs)))
     if result.stubs:
         listed = Text("Active stubs", style="bold")
         listed.append("\n" + "\n".join(result.stubs))
@@ -75,8 +81,10 @@ def run_scenario_view(result: ScenarioRun) -> Group:
         blocks.append(_path_line("Penetration figure", result.penetration_figure))
     if result.overload_figure is not None:
         blocks.append(_path_line("Overload figure", result.overload_figure))
-    if result.market_figure is not None:
-        blocks.append(_path_line("Market figure", result.market_figure))
+    if result.diagnostics_path is not None:
+        blocks.append(_path_line("Diagnostics", result.diagnostics_path))
+    for figure in result.market_figures:
+        blocks.append(_path_line("Market figure", figure))
     return Group(*blocks)
 
 
@@ -88,29 +96,89 @@ def show_run_scenario(result: ScenarioRun) -> None:
     Console().print(run_scenario_view(result), crop=False, overflow="ignore")
 
 
-def _market_blocks(level: MarketLevelResult, *, stubbed: bool) -> list[Table | Text]:
-    """One (M, penetration) point: market, both allocations, diagnostics."""
+def _market_blocks(sweep: MarketSweep, *, stubbed: bool) -> list[Table | Text]:
+    """Market measures, overloads, and diagnostics, one row per point.
+
+    Each measure is shown with its interval, and then as the paired change
+    from M = 0. Every metric is in ``metrics.json``; the overload tables show
+    the share of transformers overloaded.
+    """
     prefix = "STUB " if stubbed else ""
-    point = f"M {level.national_batteries:,.0f}, penetration {level.penetration:.0%}"
-    d = level.diagnostics
-    diagnostics = Text(
-        f"{prefix}Diagnostics, {point}: "
-        f"linearisation error {d.linearisation_error_p_per_kwh:.3f} p/kWh, "
+    market = Table(title=f"{prefix}Market measures")
+    change = Table(title=f"{prefix}Market measures, change from M = 0")
+    for table in (market, change):
+        _point_columns(table)
+        for label in _MARKET_LABELS.values():
+            table.add_column(label, justify="right")
+    overload = Table(title=f"{prefix}Transformers overloaded")
+    _point_columns(overload)
+    for heading in ("Joint", "Change", "Re-planned", "Change"):
+        overload.add_column(heading, justify="right")
+    diagnostics = Table(title=f"{prefix}Diagnostics (worst over replications, days)")
+    _point_columns(diagnostics)
+    for heading in (
+        "Linearisation error (p/kWh)",
+        "(MODE) breaks",
+        "Largest re-plan saving (p)",
+        "Total re-plan saving (p)",
+        "Tolerance",
+        "Re-planned load difference (GW)",
+        "Out-of-range slots",
+    ):
+        diagnostics.add_column(heading, justify="right")
+
+    for level in sweep.levels:
+        point = (
+            level.price_model,
+            f"{level.rho:g}",
+            f"{level.national_batteries / 1e6:g}",
+            f"{100 * level.penetration:.0f}%",
+        )
+        values = {m.metric: m.interval for m in level.market}
+        changes = {m.metric: m.interval for m in level.market_change}
+        market.add_row(*point, *(_ci(values.get(name)) for name in _MARKET_LABELS))
+        change.add_row(*point, *(_ci(changes.get(name)) for name in _MARKET_LABELS))
+        overload.add_row(
+            *point,
+            _ci(_find(level.joint_overload, _OVERLOADED)),
+            _ci(_find(level.joint_overload_change, _OVERLOADED)),
+            _ci(_find(level.replanned_overload, _OVERLOADED)),
+            _ci(_find(level.replanned_overload_change, _OVERLOADED)),
+        )
+        d = level.diagnostics
+        diagnostics.add_row(
+            *point,
+            f"{d.linearisation_error_p_per_kwh:.3f}",
+            str(d.mode_break_slots),
+            f"{d.max_replan_saving_p:.2f}",
+            f"{d.total_replan_saving_p:.2f}",
+            "exceeded" if d.exceeds_tolerance else "within",
+            f"{d.replanned_load_difference_gw:.3f}",
+            str(d.out_of_range_slots),
+        )
+    d = sweep.diagnostics
+    run = Text(
+        f"{prefix}{sweep.solve_count} fleet-day solves in {sweep.wall_time_s:.1f} s. "
+        f"Worst over the run: linearisation error "
+        f"{d.linearisation_error_p_per_kwh:.3f} p/kWh, "
         f"(MODE) breaks {d.mode_break_slots}, "
-        f"largest re-plan saving {d.max_replan_saving_p:.2f} p, "
-        f"total {d.total_replan_saving_p:.2f} p, "
-        f"{'above' if d.exceeds_tolerance else 'within'} tolerance, "
-        f"re-planned load differs by {d.replanned_load_difference_gw:.3f} GW, "
+        f"largest re-plan saving {d.max_replan_saving_p:.2f} p "
+        f"({'above' if d.exceeds_tolerance else 'within'} tolerance), "
+        f"re-planned load differs by up to {d.replanned_load_difference_gw:.3f} GW, "
         f"out-of-range slots {d.out_of_range_slots}"
     )
-    return [
-        _metric_table(f"{prefix}Market, {point}", level.market),
-        _metric_table(f"{prefix}Joint allocation, {point}", level.joint_overload),
-        _metric_table(
-            f"{prefix}Re-planned allocation, {point}", level.replanned_overload
-        ),
-        diagnostics,
-    ]
+    return [market, change, overload, diagnostics, run]
+
+
+def _point_columns(table: Table) -> None:
+    for heading in ("Price model", "ρ", "M (millions)", "Penetration"):
+        table.add_column(heading)
+
+
+def _find(
+    rows: Sequence[MetricEstimate | PairedDifference], name: str
+) -> ConfidenceInterval | None:
+    return next((row.interval for row in rows if row.metric == name), None)
 
 
 def _metric_table(title: str, rows: list[MetricEstimate]) -> Table:

@@ -11,7 +11,14 @@ from fleet_sim.models.fleet import FleetDay
 from fleet_sim.models.market import EquilibriumDiagnostics
 from fleet_sim.models.scenario import RunMetadata
 
-ComparisonName = Literal["with_batteries", "without_batteries", "diverse", "identical"]
+ComparisonName = Literal[
+    "with_batteries",
+    "without_batteries",
+    "diverse",
+    "identical",
+    "in_the_loop",
+    "historical_prices",
+]
 
 
 class FleetMetrics(BaseModel):
@@ -234,22 +241,56 @@ class OverloadCrossing(BaseModel):
 
 
 class MarketLevelResult(BaseModel):
-    """One (M, local penetration) point of a fleet-in-the-loop run.
+    """One (price model, ρ, M, local penetration) point of a market run.
 
-    ``joint_overload`` and ``replanned_overload`` are the milestone-4 overload
-    metrics under each allocation of b*. ``diagnostics`` is the worst of each
-    diagnostic over every replication and day: the largest error and saving,
-    and the summed counts.
+    ``market`` holds the market measures (``docs/formulation.md``, Market
+    measures). ``joint_overload`` and ``replanned_overload`` are the
+    milestone-4 overload metrics under each allocation of b*. Each
+    ``*_change`` is the paired difference from M = 0 on the same fleets,
+    topology and days: in the loop minus historical prices.
+    ``net_power_per_battery_home_kw`` is the mean over replications of the
+    net power per battery home in each slot. ``diagnostics`` is the worst of
+    each diagnostic over every replication and day: the largest error and
+    saving, and the summed counts.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    price_model: str
+    rho: float
     national_batteries: float
     penetration: float
+    market: list[MetricEstimate]
     joint_overload: list[MetricEstimate]
     replanned_overload: list[MetricEstimate]
-    market: list[MetricEstimate]
+    market_change: list[PairedDifference]
+    joint_overload_change: list[PairedDifference]
+    replanned_overload_change: list[PairedDifference]
+    net_power_per_battery_home_kw: list[float]
     diagnostics: EquilibriumDiagnostics
+
+
+class MarketSweep(BaseModel):
+    """A market run as ``metrics.json`` stores it, for the report and figures.
+
+    The headline point is (``headline_rho``, ``headline_penetration``): the
+    first ρ and the highest local penetration. Only it is repeated under the
+    robustness models. ``solve_count`` counts fleet-days solved, by
+    ``solve_market_day``, and ``wall_time_s`` is the time from the start of
+    the run to the end of the last solve. ``diagnostics`` is the worst over
+    every point.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    price_model: str
+    robustness_models: list[str]
+    headline_rho: float
+    headline_penetration: float
+    solve_count: int
+    wall_time_s: float
+    diagnostics: EquilibriumDiagnostics
+    levels: list[MarketLevelResult]
 
 
 class ScenarioRun(BaseModel):
@@ -278,6 +319,7 @@ class ScenarioRun(BaseModel):
     overload_figure: Path | None = None
     network_levels: list[NetworkLevelResult] = Field(default_factory=list)
     overload_crossing: OverloadCrossing | None = None
-    market_levels: list[MarketLevelResult] = Field(default_factory=list)
-    market_figure: Path | None = None
+    market: MarketSweep | None = None
+    market_figures: list[Path] = Field(default_factory=list)
+    diagnostics_path: Path | None = None
     stubs: list[str] = Field(default_factory=list)
