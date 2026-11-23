@@ -5,14 +5,12 @@ See ``docs/formulation.md``, Fleet in the loop, and ``docs/architecture.md``.
 
 from datetime import date
 from pathlib import Path
-from typing import Self
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from fleet_sim.models.fleet import SolvedHome
 from fleet_sim.models.home import SLOTS_PER_DAY
-from fleet_sim.models.prices import PriceSeries, require_gsp_region
-from fleet_sim.stubs import stub
+from fleet_sim.models.prices import PriceSeries
 
 
 class MarketSettings(BaseModel):
@@ -90,67 +88,6 @@ class MarketSettings(BaseModel):
         if isinstance(self.national_batteries, list):
             return list(self.national_batteries)
         return [self.national_batteries]
-
-
-class DayPriceInputs(BaseModel):
-    """What (PRICE) needs for one UK day in one region, slot by slot.
-
-    ``wholesale_gbp_per_mwh`` is π_t, or its lower bound π_t⁻ when the slot is
-    ``censored``; ``wholesale_upper_gbp_per_mwh`` is then π_t⁺, or ``None``
-    when only a lower bound is known. ``historical`` is the Agile rate P_t(0).
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    region: str
-    day: date
-    residual_load_gw: list[float]
-    fuel_cost_gbp_per_mwh: list[float]
-    wholesale_gbp_per_mwh: list[float]
-    censored: list[bool]
-    wholesale_upper_gbp_per_mwh: list[float | None]
-    historical: PriceSeries
-
-    @field_validator("region")
-    @classmethod
-    def region_is_a_gsp_letter(cls, value: str) -> str:
-        return require_gsp_region(value)
-
-    @model_validator(mode="after")
-    def slots_cover_a_day(self) -> Self:
-        for name in (
-            "residual_load_gw",
-            "fuel_cost_gbp_per_mwh",
-            "wholesale_gbp_per_mwh",
-            "censored",
-            "wholesale_upper_gbp_per_mwh",
-        ):
-            length = len(getattr(self, name))
-            if length != SLOTS_PER_DAY:
-                raise ValueError(
-                    f"{name} must contain {SLOTS_PER_DAY} half-hour values "
-                    f"(got {length})"
-                )
-        if self.historical.day != self.day or self.historical.region != self.region:
-            raise ValueError("historical must be the same day and region")
-        return self
-
-    @stub("returns the historical Agile rates whatever the added load")
-    def prices(self, added_load_gw: list[float]) -> PriceSeries:
-        """The Agile rate in each slot when the fleet adds ``added_load_gw``.
-
-        (PRICE), ``docs/formulation.md``, Price as a function of load:
-
-            P_t(b) = A_t(π_t + k_t [h(R_t + b_t) − h(R_t)]),
-
-        with the clipped anchor π̂_t in place of π_t in a censored slot.
-        """
-        if len(added_load_gw) != SLOTS_PER_DAY:
-            raise ValueError(
-                f"added_load_gw must contain {SLOTS_PER_DAY} half-hour values "
-                f"(got {len(added_load_gw)})"
-            )
-        return self.historical
 
 
 class EquilibriumDiagnostics(BaseModel):

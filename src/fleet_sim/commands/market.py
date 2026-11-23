@@ -3,6 +3,7 @@
 For each replication, national fleet size M and local penetration: draw the
 fleet on the scenario's topology, then for each day build the price inputs,
 solve the equilibrium, and evaluate the network under both allocations.
+Each day's price inputs are built once and shared by every replication.
 See ``docs/architecture.md``, Fleet in the loop.
 """
 
@@ -13,13 +14,13 @@ from pathlib import Path
 from typing import Literal
 
 from fleet_sim.data.households import HouseholdDemandPool
-from fleet_sim.data.source import PriceSource
 from fleet_sim.experiments.report import replication_seed, t_interval
 from fleet_sim.fleet.frames import frames_for_day, write_frames
 from fleet_sim.fleet.generate import generate_fleet, with_demand
-from fleet_sim.fleet.market import day_price_inputs, market_metrics, solve_market_day
+from fleet_sim.fleet.market import market_metrics, solve_market_day
 from fleet_sim.fleet.network import Network
 from fleet_sim.fleet.overload import day_overload, summarise_replication
+from fleet_sim.fleet.price_inputs import DayPriceInputs, day_price_inputs
 from fleet_sim.fleet.topology import assign_transformers, build_topology
 from fleet_sim.models.fleet import FleetDay
 from fleet_sim.models.frames import Frame
@@ -32,6 +33,8 @@ from fleet_sim.models.network import (
 )
 from fleet_sim.models.results import MarketLevelResult, MetricEstimate, ScenarioRun
 from fleet_sim.models.scenario import RunMetadata, Scenario
+from fleet_sim.prices.config import load_config
+from fleet_sim.prices.parameters import load_price_model
 from fleet_sim.progress import RunProgress
 from fleet_sim.random_streams import RandomStreams
 from fleet_sim.scenario import git_commit
@@ -40,6 +43,7 @@ from fleet_sim.viz.market import plot_market_placeholder
 from fleet_sim.viz.save import save_figure
 
 _PACKAGE = "fleet-sim"
+_CALIBRATION = Path("calibration/price_curves.toml")
 
 Allocation = Literal["joint", "replanned"]
 _OVERLOAD_METRICS = (
@@ -65,12 +69,17 @@ def run_market_scenario(
     scenario: Scenario,
     *,
     pool: HouseholdDemandPool,
-    price_source: PriceSource,
     output_dir: Path,
+    cache_dir: Path | None = None,
     progress: RunProgress | None = None,
     release: bool = False,
 ) -> ScenarioRun:
-    """Run ``scenario`` with its ``[market]`` and ``[network]`` sections."""
+    """Run ``scenario`` with its ``[market]`` and ``[network]`` sections.
+
+    ``cache_dir`` holds the price-curve inputs (Agile rates, residual load,
+    fuel cost); by default it is the one ``calibration/price_curves.toml``
+    names, which also gives the fuel-cost settings.
+    """
     if scenario.market is None:
         raise ValueError("a market scenario needs a [market] section")
     if scenario.network is None:
@@ -84,6 +93,19 @@ def run_market_scenario(
     levels = settings.national_battery_levels()
     penetrations = scenario.penetration_levels()
     dates = _dates(scenario.start, scenario.end)
+    calibration = load_config(_CALIBRATION)
+    model = load_price_model(settings.price_parameters_file, settings.price_model)
+    price_cache = Path(calibration.data.cache_dir) if cache_dir is None else cache_dir
+    inputs = [
+        day_price_inputs(
+            day,
+            scenario.region,
+            price_cache,
+            model=model,
+            fuel_cost=calibration.fuel_cost,
+        )
+        for day in dates
+    ]
     if progress is not None:
         progress.task(
             "Market",
@@ -117,12 +139,11 @@ def run_market_scenario(
                 scenario,
                 settings,
                 pool,
-                price_source,
                 spec,
                 national_batteries,
                 penetration,
                 seed,
-                dates,
+                inputs,
                 progress,
                 label,
             )
@@ -205,12 +226,11 @@ def _run_days(
     scenario: Scenario,
     settings: MarketSettings,
     pool: HouseholdDemandPool,
-    price_source: PriceSource,
     spec: NetworkSpec,
     national_batteries: float,
     penetration: float,
     seed: int,
-    dates: list[date],
+    inputs: list[DayPriceInputs],
     progress: RunProgress | None,
     label: str,
 ) -> list[MarketDay]:
@@ -230,12 +250,11 @@ def _run_days(
     )
     base = assign_transformers(generated.fleet, spec)
     days: list[MarketDay] = []
-    for day in dates:
+    for day_inputs in inputs:
         if progress is not None:
-            progress.detail(f"{label}, {day.isoformat()}")
-        fleet = with_demand(base, pool, day).fleet
-        inputs = day_price_inputs(day, scenario.region, price_source)
-        days.append(solve_market_day(fleet, inputs, national_batteries, settings))
+            progress.detail(f"{label}, {day_inputs.day.isoformat()}")
+        fleet = with_demand(base, pool, day_inputs.day).fleet
+        days.append(solve_market_day(fleet, day_inputs, national_batteries, settings))
         if progress is not None:
             progress.advance()
     return days

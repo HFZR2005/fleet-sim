@@ -197,7 +197,10 @@ def run_scenario_command(
     cache_dir: Annotated[
         Path | None,
         typer.Option(
-            help="Price cache directory (default: .cache/agile)",
+            help=(
+                "Price cache directory (default: .cache/agile, or for a "
+                "[market] scenario the price-curve cache, .cache/prices)"
+            ),
             show_default=False,
         ),
     ] = None,
@@ -217,6 +220,7 @@ def run_scenario_command(
                     cache_dir=cache_dir, opener=_OPENER.get()
                 ),
                 max_households=max_households,
+                price_cache_dir=cache_dir,
                 progress=progress,
                 release=release,
             )

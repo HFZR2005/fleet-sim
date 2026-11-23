@@ -44,6 +44,7 @@ def run_saved_scenario(
     output_dir: Path,
     price_source: PriceSource,
     max_households: int = 100,
+    price_cache_dir: Path | None = None,
     progress: RunProgress | None = None,
     release: bool = False,
 ) -> ScenarioRun:
@@ -51,7 +52,9 @@ def run_saved_scenario(
 
     A single penetration is one paired experiment. A list is that experiment
     at the highest penetration, plus the penetration sweep. ``max_households``
-    keeps the first households in the demand file.
+    keeps the first households in the demand file. ``price_cache_dir`` is
+    the price-curve input cache for a ``[market]`` scenario, which reads
+    its prices from there instead of ``price_source``.
     """
     scenario = load_scenario(scenario_path)
     _reject_clock_changes(scenario)
@@ -64,8 +67,8 @@ def run_saved_scenario(
         return run_market_scenario(
             scenario,
             pool=pool,
-            price_source=price_source,
             output_dir=output_dir,
+            cache_dir=price_cache_dir,
             progress=progress,
             release=release,
         )
