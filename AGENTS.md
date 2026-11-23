@@ -13,7 +13,14 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 - Every change belongs to one GitHub issue. Work only on what that issue's acceptance criteria describe. Do not touch files outside its scope; if something else needs changing, say so in your summary instead of changing it.
 - Keep each change small enough for a human to review in one sitting. If an issue looks too large, propose a split before writing code.
 - Ask before adding any dependency.
-- Finish with a short summary: what changed, why, and any decision you made that the issue didn't specify.
+- Finish with a short summary: what changed, why, and each decision the issue didn't settle, with the reason for it.
+
+## How a milestone is built
+
+- **Make the change easy first.** If new work would copy existing orchestration, the first issue is a refactor that changes no behaviour. Prove it by reproducing the committed results exactly.
+- **Start each new idea from a case small enough to solve by hand.** That case is the first test, written before the implementation, so the first output is a number someone has already checked.
+- **Widen in thin, real slices.** Go from one fleet-day to a scenario, then the sweep, then metrics and figures, then the write-up. Every slice produces real results; review what got wider, not what replaced a placeholder.
+- **When the design is uncertain, spike first.** A short throwaway script under `scripts/` explores the idea on the tiny case. The library version follows as a normal issue with tests.
 
 ## Issues
 
@@ -23,7 +30,7 @@ The maths is specified in `docs/formulation.md`. Code implements that document; 
 
 ## Stubs
 
-The codebase may contain stubs: functions that return placeholder data while the real implementation is pending. Placeholder output must never be mistaken for a result.
+The codebase may contain stubs: functions that return placeholder data while the real implementation is pending. Use one only for a stage that genuinely can't be built yet, not as a default first step. Placeholder output must never be mistaken for a result.
 
 - Every stub is registered with the `@stub("reason")` decorator. Any function returning placeholder data is a stub, however small.
 - A stub takes and returns the real types for its stage (e.g. `Fleet`, `PowerProfile`, `NodeFeedback`). Don't change an interface just to make a stub easier.
