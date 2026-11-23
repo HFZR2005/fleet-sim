@@ -623,7 +623,7 @@ which is exactly what an extra kW in slot $`t`$ costs that home in (COST) at pri
 
 Units: $`P_t`$ is in pence per kWh and $`\beta`$ in GW, so the integral is in pence per kWh times GW. Dividing by $`\kappa`$ (GW per kW) gives pence per hour, and $`\Delta`$ (hours) gives pence.
 
-**$`\Phi`$ is not the fleet's bill.** It is the area under the price curves. A home pays $`P_t`$ for its own extra kW but ignores that the kW raises the price for every other home. A fleet run as one buyer would minimise its total bill instead. That counts the rise and charges less into steep slots. The difference between the two outcomes is the cost of each home acting alone. Milestone 5 measures it.
+**$`\Phi`$ is not the fleet's bill.** It is the area under the price curves. A home pays $`P_t`$ for its own extra kW but ignores that the kW raises the price for every other home. A fleet run as one buyer would minimise its total bill instead. That counts the rise and charges less into steep slots. The difference between the two outcomes is the cost of each home acting alone. It is not measured yet; see [Later extensions](#later-extensions).
 
 **What is unique.** Where $`P_t`$ is strictly increasing, $`\Phi`$ is strictly convex in $`b_t`$, so the national added load $`b^*_t`$ is the same in every equilibrium. Which home supplies it is not. Two identical homes can swap slots without changing $`b^*`$ or anyone's prices. National results are therefore determined, but the flow through a transformer, which depends on which homes charge when, is not. See [Open choices](#open-choices).
 
@@ -719,6 +719,169 @@ Each needs the fleet to charge, or discharge, at some point in the replication.
 
 **Net power per battery home** in slot $`t`$ is $`\frac{1}{D N_b} \sum_{d} \sum_{j \in B} n_{jdt}`$, in kW. For $`M > 0`$ it is the mean $`b^*_{dt}`$ divided by $`M / 10^6`$, the national added load per million batteries in GW. With $`M = 0`$ it is the herd at historical prices on the same scale.
 
+## Coordination
+
+So far a transformer limit has been something to measure, not something to obey. Every home plans against its tariff and the network adds up what results. When enough homes chase the same cheap half-hour, the transformer that feeds their street carries more than it was built for, and nobody in the model minds.
+
+This section asks what it takes to make the homes mind. The answer is a price. The network never tells a home "don't charge now"; it raises that home's price for that half-hour until charging then is no longer worth it ([ADR-0001](decisions/0001-network-as-a-price.md)). The idea is old and the economics behind it is the familiar one of scarcity: when something is in short supply, a price rations it. The only new questions are what the price should be and who sets it. The rest of this section answers them, first with a street of two homes and then in general.
+
+### A street with two batteries
+
+Take two homes on one street, fed by a transformer that can carry 1.5 kW. Each home has a small battery, 1 kWh and 2 kW, which starts and ends the day empty and loses nothing in storage. The day has four half-hours. Electricity costs 10, 20, 30 and 50 pence per kWh in them, in that order. Each home uses nothing until the last half-hour, when it draws 1 kW. Half an hour at 1 kW is 0.5 kWh.
+
+Left alone, each home does the obvious thing. It charges 0.5 kWh in the cheapest half-hour, at 10 p, and uses it in the dearest, at 50 p. Its bill is 5 p instead of 25 p, a saving of 20 p. But both homes do the same, and charging 0.5 kWh in half an hour takes 1 kW, so the transformer carries 2 kW in the first half-hour. That is a third over its limit.
+
+A coordinator who could see both homes would allow the street only 1.5 kW in the first half-hour, which is 0.75 kWh between them. The remaining 0.25 kWh has to come from the next cheapest half-hour, at 20 p. The street's bill rises from 10 p to 12.5 p. Obeying the limit costs the street 2.5 p.
+
+### The marginal value of the transformer
+
+Now ask a question an economist would ask. If the transformer could carry a little more in the first half-hour, how much would the street save?
+
+Each extra kWh of room lets one kWh move from the 20 p half-hour back to the 10 p one. That saves 10 p. So an extra kWh of transformer capacity in the first half-hour is worth 10 p to the street. In every other half-hour the transformer already has room to spare, and an extra kWh there is worth nothing.
+
+That number, the marginal value of the limit, is called its **shadow price**. It is a price because it is measured in pence per kWh and behaves like one. It is a shadow because nobody charges it: it is not on any tariff and no one pays it. It falls out of the optimisation as a by-product, the way the value of an hour of a scarce machine falls out of a factory's production plan.
+
+Two facts about shadow prices follow from the definition. A limit with room to spare has a shadow price of zero, since more room is worth nothing. And a limit that binds has a positive one, since more room would let the street do better. Never both: either the transformer is below its limit, or its capacity has a value.
+
+### From a shadow price to a real signal
+
+Here is the useful part. Add the shadow price to the tariff each home sees. In the first half-hour the price becomes 10 + 10 = 20 p, the same as the second half-hour. The rush into the first half-hour was caused by its being 10 p cheaper than the next; that reason is now gone.
+
+This is the sense in which the shadow price is the *right* adjustment rather than just a penalty. With it added, the coordinator's plan for the street is also the best plan each home could make for itself. No home has to be told what to do, or to know anything about the transformer or its neighbours. It needs one number per half-hour.
+
+The same example shows the weakness. At 20 p and 20 p, each home is now exactly indifferent between the first two half-hours, and that is no accident: the shadow price is precisely the amount that removes the advantage of the crowded half-hour, and not a penny more. A home choosing for itself may still pick the first half-hour. If both do, the transformer is overloaded again. The price signal is correct and still not enough on its own, which is why the results report two outcomes, described below.
+
+Economists will recognise the arrangement from electricity markets, where congestion on a transmission line makes prices differ between places ("locational marginal prices"). Here the congested line is a street transformer.
+
+### The general rule
+
+The rest of this section states the same ideas for any fleet and any network, so that the code can implement them exactly.
+
+**Notation.** Nodes of the [Network](#network) tree are indexed by $`v`$. Node $`v`$ has limit $`\bar f_v`$ in kW (`limit_kw`), and $`V`$ is the set of nodes that have one. $`\mathcal{H}(v)`$ is the set of homes below $`v`$: those attached to it or to any node under it. $`\mathcal{A}(j)`$ is the set of limited nodes on the path from home $`j`$'s node up to the root, that node included. $`B`$ is the set of homes with a battery, as in [Market measures](#market-measures), and $`n_{jt} = c_{jt} - d_{jt}`$ is a home's net battery power, as in [Added load](#added-load).
+
+**The limit.** The flow through a node is the grid import of every home below it. By (BALANCE) a home's import is its demand plus its net battery power, and a home without a battery imports just its demand:
+
+$$
+f_{vt} = \sum_{j \in \mathcal{H}(v)} L_{jt} + \sum_{j \in \mathcal{H}(v) \cap B} n_{jt}.
+$$
+
+The flow must stay under the limit. Written as energy over the half-hour,
+
+$$
+\Delta \sum_{j \in \mathcal{H}(v) \cap B} n_{jt} \;\le\; \Delta \Bigl(\bar f_v - \sum_{j \in \mathcal{H}(v)} L_{jt}\Bigr),
+  \qquad v \in V,\ t = 0, \ldots, T - 1.
+\tag{LIMIT}
+$$
+
+The right-hand side is the room the node has left once demand is served. It can be negative, and then the batteries below the node must discharge to make room. Both sides are multiplied by $`\Delta`$ so that the limit is in kWh and its shadow price is in pence per kWh, the same unit as the tariff.
+
+**The coordinated program.** For $`M > 0`$ the coordinator solves the joint program of [Computing it](#computing-it) with the limits added: minimise (JOINT) subject to each battery home's (SOC), bounds, (BALANCE) and (TERMINAL), (LINK) in every slot, and (LIMIT) for every limited node and slot. It is still one linear program per fleet-day. Its solution is written $`n^C`$, its added load $`b^C`$, and the prices it causes $`p^C_t = P_t(b^C_t)`$.
+
+With $`M = 0`$ prices are historical, $`p^0_t = P_t(0)`$, and (JOINT) is undefined because $`\kappa = 0`$. The coordinator then minimises the fleet's tariff bill, less the fixed cost of its demand,
+
+$$
+\Delta \sum_{t} p^0_t \sum_{j \in B} n_{jt},
+\tag{JOINT-0}
+$$
+
+subject to the same constraints, and $`p^C = p^0`$. This is what $`\Phi`$ tends to as $`\kappa \to 0`$. The two-home street is this case.
+
+When no limit binds, (LIMIT) rules out no schedule the joint program would choose. The coordinated program then has the same optimum as milestone 4.6: the same national added load, the same prices and the same national measures.
+
+**Shadow prices.** $`\lambda_{vt} \ge 0`$ is the Lagrange multiplier of (LIMIT) at node $`v`$ in slot $`t`$: the fall in the program's optimum, in pence, per extra kWh of room at that node in that slot. As in the street, it is zero wherever the limit has room to spare:
+
+$$
+\lambda_{vt}\,\bigl(f_{vt} - \bar f_v\bigr) = 0.
+$$
+
+A home's import passes through every limited node above it, so its price adjustment is the sum of their shadow prices:
+
+$$
+a_{jt} = \sum_{v \in \mathcal{A}(j)} \lambda_{vt}
+  \quad \text{pence per kWh}.
+\tag{LOCAL}
+$$
+
+Its **local price** is $`p^C_t + a_{jt}`$. Homes under the same transformer share one local price.
+
+**Why the local price is the right signal.** Add the limits to the objective, each weighted by its shadow price:
+
+$$
+\mathcal{L}(n, \lambda) = \Phi(n) + \Delta \sum_{v \in V} \sum_t \lambda_{vt}\,\bigl(f_{vt} - \bar f_v\bigr).
+$$
+
+Its derivative with respect to one home's power in one slot is
+
+$$
+\frac{\partial \mathcal{L}}{\partial n_{jt}} = \Delta\,\bigl(P_t(b_t) + a_{jt}\bigr),
+$$
+
+which is what an extra kW in that slot costs home $`j`$ in (COST), at tariff $`P_t(b_t)`$ and adjustment $`a_{jt}`$. The program is linear, so strong duality holds: there are shadow prices $`\lambda^*`$ at which $`n^C`$ also minimises $`\mathcal{L}(\cdot, \lambda^*)`$ with the limit rows removed. By the argument of [The equilibrium as one optimisation](#the-equilibrium-as-one-optimisation), every home's schedule in $`n^C`$ is then the best it could do alone at its local price. This is the street's "the coordinator's plan is also each home's own best plan", in general.
+
+The converse fails, as it did in the street. A home solved alone at its local price may have several equally good schedules, and need not choose the one in $`n^C`$. Where a limit binds this is the rule, not the exception. The shadow prices need not be unique either, when the program is degenerate; the solver's are used.
+
+### Two outcomes
+
+Every run reports the two outcomes the street suggested:
+
+- **Dispatched.** Each battery home runs the coordinator's schedule, after the tie-break below. Every limit holds, by construction.
+- **Re-planned at local prices.** Each battery home is solved alone with the one-home solver, (MODE) included, at tariff $`p^C_t`$ and adjustment $`a_{jt}`$. This is what the price signal achieves by itself. Limits can be broken, and overloads are measured as in [Overload metrics](#overload-metrics).
+
+In both, a household's bill is its tariff bill, $`\Delta \sum_t p^C_t g_{jt}`$. The adjustment is a signal, not a charge, and is left out.
+
+### Who pays
+
+In the street, the 2.5 p cost of the limit could fall entirely on one home, which charges its 0.5 kWh in the first half-hour while the other is pushed into the second. Or it could be shared. The street's total is the same either way, and the coordinator's program, like the joint program before it, does not care which. The solver picks whichever corner it reaches first. That is arbitrary, and arbitrary is a poor answer to the question "who pays?". So the coordinator makes a second choice: among the plans that are equally good for the fleet, it picks the one in which the worst-off home loses least.
+
+A home's **loss** is what the limits cost it, at the prices of the coordinated outcome. Let $`Q_j`$ be home $`j`$'s lowest possible tariff bill at $`p^C`$ with no limits and no adjustment, from the one-home problem with (MODE) dropped. Then
+
+$$
+\ell_j = \Delta \sum_t p^C_t\, g_{jt} - Q_j
+  \quad \text{pence}.
+\tag{LOSS}
+$$
+
+A home cannot do better than its own best plan, so $`\ell_j \ge 0`$. The prices and the $`Q_j`$ are fixed by the first solve, so $`\ell_j`$ is linear in the home's import.
+
+The tie-break is a second linear program. Let $`\Phi^C`$ be the optimum of the coordinated program. Then
+
+$$
+\begin{aligned}
+\text{minimise}\quad & z \\
+\text{subject to}\quad & \ell_j \le z, \quad j \in B, \\
+& \text{(JOINT)} \le \Phi^C + \varepsilon, \\
+& \text{every constraint of the coordinated program,}
+\end{aligned}
+\tag{FAIR}
+$$
+
+with (JOINT-0) in place of (JOINT) when $`M = 0`$. $`z`$ is the largest loss of any home. The tolerance $`\varepsilon`$ is 0.01 pence per fleet-day: enough to keep the second program feasible when the first optimum is known only to the solver's precision, and too small to move the prices. The dispatched schedules are the solution of (FAIR). The shadow prices come from the first solve.
+
+In the street, (FAIR) splits the 2.5 p evenly. Each home charges 0.375 kWh at 10 p and 0.125 kWh at 20 p, a bill of 6.25 p and a loss of 1.25 p. In a larger fleet, minimising the largest loss does not make everyone lose the same: a home whose transformer never binds loses nothing, and is not made to pay. It only stops the cost from landing wherever the solver happened to put it.
+
+### When a limit cannot be met
+
+Sometimes demand alone exceeds a transformer's limit by more than the batteries below it can discharge. Then no plan obeys the limit, and the program has no solution. Rather than drop such a day, which would drop exactly the days that matter, each (LIMIT) row is given a slack $`e_{vt} \ge 0`$, in kWh, on its right-hand side, and
+
+$$
+\theta \sum_{v \in V} \sum_t e_{vt}
+$$
+
+is added to the objective, with $`\theta = 1000`$ pence per kWh. That is far above any price the curve produces, so the slack is used only when nothing else works. Where it is used, the overload is reported as **unavoidable**, by node and slot, and the shadow price there equals $`\theta`$. This is the exact-penalty method: as long as $`\theta`$ is larger than every shadow price of the program without slack, the two programs agree whenever the limits can be met.
+
+### Who-pays measures
+
+These summarise one replication. Home $`j`$'s loss on day $`d`$ is $`\ell_{jd}`$, in the dispatched outcome, and its mean loss is $`\bar\ell_j = \frac{1}{D} \sum_d \ell_{jd}`$, in pence per day.
+
+- **Mean loss** is $`\bar\ell_j`$ averaged over battery homes.
+- **90th-percentile loss** and **largest loss** are taken over the battery homes' $`\bar\ell_j`$.
+- **Share losing more than 5 p/day** is the fraction of battery homes with $`\bar\ell_j > 5`$.
+- **Binding split** is the mean loss over homes whose $`a_{jt}`$ is positive in at least one slot of the replication, and over the rest.
+
+The fleet's **cost of coordination** is the paired difference in saving per battery home ([Market measures](#market-measures)) between milestone 4.6 and the dispatched outcome, on the same fleet and days. It is not the mean loss, and the difference between them is informative. The loss compares two plans at the same prices. The saving compares each outcome at its own prices, and obeying the limits moves the national load and so the prices. The gap between the two measures is the part of the cost that travels through the price.
+
+Homes without a battery are not dispatched, but their bills move with the prices. Their price change is computed as in [Market measures](#market-measures), at $`p^C`$.
+
 ## Later extensions
 
 These are not part of the model above.
@@ -726,4 +889,5 @@ These are not part of the model above.
 - **Export payments.** A separate export power and an export price, so the house can be paid for power sent to the grid.
 - **Solar.** Photovoltaic generation as a further inflow on the bus, reducing what the load and the charger draw from the grid.
 - **Degradation.** A cost on throughput or on cycles, so the bill is no longer import cost alone.
+- **One buyer.** The fleet run as a single buyer, minimising its total bill rather than $`\Phi`$, so that it counts how its own charging raises the price. Comparing that with the equilibrium measures what each home acting alone costs the fleet.
 - **Forecasts.** Demand and import prices are data in this problem. A later model can replace them with predictions and say how the schedule is revised when those predictions change.
