@@ -22,11 +22,13 @@ Where do transformer limits bind, and how does the network reach a home? Done. `
 
 How much does the wholesale price move when the fleet adds load? Done. `scripts/fit_price_curves.py` fits the price as a curve of residual load, and `finalise` writes the chosen curves to `calibration/price_curves.json`. The main model is an exponential fitted to price divided by fuel cost, with four other curve shapes and an unadjusted fit kept as robustness checks ([ADR-0004](docs/decisions/0004-price-curve-model.md)). On the held-out year, 2025, it scores 21.3 £/MWh RMSE.
 
-Next, the fleet goes into the loop: batteries schedule against prices that respond to their own charging, iterated until schedules and prices agree. Then penetration varies nationally, which moves the price, and locally, which loads the transformers, as two separate axes.
+## Milestone 4.6
+
+What happens when the fleet's own charging moves the prices it schedules against? Done. `fleet-sim run-scenario scenarios/market-sweep.toml --release` solves the price equilibrium for every day, replication and (national, local) penetration pair as one linear program, and reports savings, national added load and overload metrics with 95% intervals, paired against the same fleets at historical prices. National uptake M moves the price; local uptake and clustering load the transformers. Feedback spreads the national herd, savings fall with M (to 80% at 4 million batteries under the main curve, 25–42% under the steep-evening robustness curves), and transformers stay overloaded wherever homes plan alone at the equilibrium prices. Results are in `docs/results/milestone-4.6.md`.
 
 ## Milestone 5
 
-How much of the battery savings can coordination keep while removing the overloads? A coordinator adjusts each home's charging window so that no transformer exceeds its limit. The question is the trade-off: how many pence per home does the fleet give up, and which homes bear the cost?
+How much of the battery savings can coordination keep while removing the overloads? Milestone 4.6 is the baseline: prices alone. Price feedback spreads the national herd and keeps 80% of each home's saving at 4 million batteries under the main price curve, but it does not protect transformers: homes that plan alone at the equilibrium prices charge together again, and every transformer stays overloaded at full local penetration. A coordinator that also enforces transformer limits is compared against that baseline on the same fleets, topology and days. The question is the trade-off: how many pence per home does the fleet give up beyond what prices already take, and which homes bear the cost?
 
 ## Milestone 6
 

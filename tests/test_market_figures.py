@@ -106,24 +106,27 @@ def test_the_market_figures_draw_the_saved_results(
     # Added load: M = 0 and M = 1 million at the headline, over 48 slots.
     lines = added.axes[0].get_lines()
     assert [line.get_label() for line in lines] == [
-        "M = 0 (herd at historical prices)",
-        "M = 1 million",
+        "Prices ignore batteries (the herd)",
+        "1 million batteries in Britain",
     ]
     assert _values(lines[0].get_xdata())[-1] == 23.5
     assert tuple(added.get_size_inches()) == MARKET_FIGURE_INCHES
     # Saving: one line per price model, 50 at M = 0 and 40 at 1 million.
     lines = saving.axes[0].get_lines()
-    assert [line.get_label() for line in lines] == [_MAIN, _ROBUST]
+    assert [line.get_label() for line in lines] == [
+        "Main price curve",
+        "Steepest evening (cubic)",
+    ]
     assert _values(lines[0].get_xdata()) == [0.0, 1.0]
     assert _values(lines[0].get_ydata()) == [50.0, 40.0]
     # Overloads: a 2 × 2 grid (ρ by allocation), one line per M, the share
     # against penetration in percent.
     assert tuple(overload.get_size_inches()) == OVERLOAD_GRID_FIGURE_INCHES
     assert [ax.get_title() for ax in overload.axes] == [
-        "Joint, ρ = 0",
-        "Re-planned, ρ = 0",
-        "Joint, ρ = 0.8",
-        "Re-planned, ρ = 0.8",
+        "Solver picks who charges, batteries spread evenly",
+        "Each home plans alone, batteries spread evenly",
+        "Solver picks who charges, batteries clustered",
+        "Each home plans alone, batteries clustered",
     ]
     for ax in overload.axes:
         assert len(ax.get_lines()) == 2
