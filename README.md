@@ -64,9 +64,21 @@ Fifty homes on four transformers, region C, 5–11 January 2026, thirty replicat
 uv run fleet-sim run-scenario scenarios/market-sweep.toml --release
 ```
 
-The same fifty homes, but each day's prices now respond to the fleet's own charging through the fitted price curve, and the fleet is solved for the equilibrium where every home is optimal at the prices it causes. National uptake, 0 to 4 million batteries, moves the price; local uptake and clustering load the transformers. Ten replications, each paired with the same fleet at historical prices. Price feedback spreads the national herd: per million batteries the peak added load falls from 4.2 GW at historical prices to 3.5 GW at 1 million batteries and 2.2 GW at 4 million. Each home keeps 90% of its saving at 1 million batteries and 80% at 4 million under the main price curve, but only 25–42% at 4 million under the robustness curves with steeper evening slopes. Under the main curve most of the lost saving is dearer charging, not cheaper discharging, as the price-curve fit predicted. Prices alone do not protect transformers: when each home plans alone at the equilibrium prices the fleet herds again, and at full local penetration every transformer stays overloaded at every national uptake. The full results, the diagnostics and what depends on the choice of allocation and price curve are in [docs/results/milestone-4.6.md](docs/results/milestone-4.6.md).
+One battery is far too small to move the electricity price. A million of them are not. When they all charge in the same cheap half-hour, that half-hour stops being cheap. Here the price responds to the fleet through a curve fitted to 2021–2024 market history. Each day is solved for the point where it settles: every home's schedule is the best it can do at the prices the whole fleet creates. The same fifty homes and four transformers as above, in the same January week, are scaled up to 0.5–4 million batteries in Great Britain.
 
-![Saving per battery home against national batteries, three price curves, fifty homes, region C, 5–11 January 2026](docs/saving_by_model.svg)
+**A responsive price spreads the herd, but only partly.** With prices that ignore it, the fleet piles into the same half-hours, the tall grey spikes below. As batteries move the price, the spikes shrink and charging spreads into neighbouring half-hours. At half a million batteries the change is small. At 4 million, each battery adds about half as much to the busiest half-hour as it would if prices ignored the fleet. The total still grows: 4 million batteries add about 8.8 GW at their peak, roughly a third of Britain's overnight demand that week. The evening doesn't move, because each battery is already running its whole home then.
+
+![Added load per million batteries over the day, fifty homes, region C, 5–11 January 2026](docs/added_load.svg)
+
+**How much of the saving survives depends on the price curve.** With prices that ignore it, a battery saves its home 79 p a day, about £290 a year at that rate. Under the main price curve it keeps 90% of that at 1 million batteries and 80% at 4 million. Two steeper curves fit history almost as well. Under them, a home keeps only 42% and 25% at 4 million. Beyond about 1 million batteries, the shape of the price curve is the biggest uncertainty in the answer.
+
+![Saving per battery home against batteries in Britain, three price curves, fifty homes, region C, 5–11 January 2026](docs/saving_by_model.svg)
+
+**A national price can't see a street.** The price settles how much the fleet charges in each half-hour, not which homes do it. If the solver hands out the schedules, it happens to spread streets apart, and more batteries nationally seems to relieve local transformers (left). But nothing makes a home follow that schedule. When each home plans alone at the same prices, neighbours make the same choice and herd again (right). Every transformer on a fully battery-equipped street stays overloaded, however many batteries Britain has. Protecting transformers needs coordination, which is milestone 5.
+
+![Share of transformers overloaded against homes with a battery, fifty homes, region C, 5–11 January 2026](docs/overload_by_penetration.svg)
+
+The full results, what depends on the price curve, and how far to trust the numbers are in [docs/results/milestone-4.6.md](docs/results/milestone-4.6.md).
 
 ## Price curves
 
