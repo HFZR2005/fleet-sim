@@ -20,7 +20,7 @@ The simulator models the last mile: a tree of secondary transformers, each servi
 
 ## DNO regions
 
-Great Britain is divided into 14 electricity distribution regions, each operated by a Distribution Network Operator (DNO). Octopus Agile prices vary by region because each GSP group sees different wholesale costs. The simulator identifies regions by their single-letter GSP code (e.g., `C` for South Wales). The [Octopus region page](https://octopus.energy/dashboard/new-quote/smart/tariffs/) shows which code corresponds to which area.
+Great Britain is divided into 14 electricity distribution regions, each operated by a Distribution Network Operator (DNO). Octopus Agile prices vary by region because each GSP group sees different wholesale costs. The simulator identifies regions by their single-letter GSP code (e.g., `C` for London). The [Octopus region page](https://octopus.energy/dashboard/new-quote/smart/tariffs/) shows which code corresponds to which area.
 
 ## Transformer ratings
 
